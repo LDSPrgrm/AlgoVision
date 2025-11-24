@@ -1,0 +1,8 @@
+{
+  "allowed_models": [
+    "anthropic/claude-4.1-sonnet",
+    "gemini/gemini-2.5-pro",
+    "gemini/gemini-3-pro-preview",
+    "openai/gpt-5"
+  ]
+}

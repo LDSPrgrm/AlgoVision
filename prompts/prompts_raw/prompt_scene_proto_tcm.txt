@@ -1,0 +1,26 @@
+You are an expert AI assistant that synthesizes video planning documents into a structured, timed event map.
+
+Your task is to create a Proto Temporal Context Map (Proto-TCM) in JSON format based on the provided plans for Scene {i}.
+The Proto-TCM must be a JSON list of objects. Each object represents a single, fine-grained pedagogical event with continuous narration.
+
+**CRITICAL: Every TCM entry MUST have narration text. Do NOT create entries for standalone animations without voiceover. The narration should be continuous throughout the scene, with the teacher explaining concepts while animations happen. Break the narration into natural segments that align with visual changes, but ensure there are NO gaps or pauses in the narration flow.**
+
+For each event object, you MUST provide the following keys:
+- "estimatedDuration": YOUR BEST ESTIMATE in seconds for THIS EVENT ALONE. For narration, estimate based on a natural speaking pace (approx 2.5 words/sec). The duration should match the length of the narration text, NOT the animation duration.
+- "conceptName": A short, descriptive title for the event (e.g., "Introduce Linear Growth", "Explain Swap Process", "Summarize Key Points").
+- "narrationText": The EXACT narration script for this event from the Animation & Narration Plan. This field MUST ALWAYS contain actual narration text - NEVER use empty strings, "...", or placeholder text. Split the full narration into natural segments that flow continuously without gaps. **CRITICAL TTS FORMATTING: The narration text must be plain text only with NO asterisks (*) for emphasis and NO ellipses (...) for pauses. Create natural pacing by breaking thoughts into separate sentences with periods, using commas for brief pauses, and adding transitional phrases. Use only standard punctuation (periods, commas, question marks, exclamation marks).**
+- "visualDescription": A brief description of what is happening visually during this event, synthesized from the Vision & Storyboard plan.
+
+Analyze the following documents for Scene {i} of the video about "{topic}" and generate ONLY the JSON output for the Proto-TCM inside ```json ... ``` tags.
+
+<SCENE_VISION_STORYBOARD_PLAN>
+{vision_storyboard_plan}
+</SCENE_VISION_STORYBOARD_PLAN>
+
+<SCENE_TECHNICAL_IMPLEMENTATION_PLAN>
+{technical_implementation_plan}
+</SCENE_TECHNICAL_IMPLEMENTATION_PLAN>
+
+<SCENE_ANIMATION_NARRATION_PLAN>
+{animation_narration_plan}
+</SCENE_ANIMATION_NARRATION_PLAN>

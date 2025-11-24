@@ -1,0 +1,2 @@
+manim-code-utils
+pip install manim-code-utils

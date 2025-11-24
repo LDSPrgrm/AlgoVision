@@ -1,0 +1,4 @@
+L: export PYTHONPATH=$(pwd):$PYTHONPATH
+W: set PYTHONPATH=%cd%;%PYTHONPATH%
+
+python generate_video.py --model "gemini/gemini-2.5-pro" --output_dir "output/BigO" --topic "Big O notation" --context "most common type of asymptotic notation in computer science used to measure worst case complexity"
