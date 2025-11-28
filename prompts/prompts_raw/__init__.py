@@ -109,7 +109,7 @@ Requirements:
 5. Include verification steps to confirm the error is resolved.
 6. Suggest preventive measures for avoiding similar errors in the future.
 7. If external assets (e.g., images, audio, video) are referenced, remove them.
-8. Preserve all original code that is not causing the reported error. Do not remove or alter any intentional elements unnecessarily.
+8. Preserve all original code that is not causing the reported error. Do not remove or alter any intentional elements unnecessarily. **If voiceover text is present, ensure it uses plain text only with NO asterisks (*) for emphasis, NO colons (:), and NO ellipses (...) for pauses. Create natural pacing by breaking thoughts into separate sentences with periods, using commas for brief pauses, and adding transitional phrases. Use only standard punctuation (periods, commas, question marks, exclamation marks).**
 9. Follow best practices for code clarity and the current Manim version."""
 
 _prompt_animation_rag_query_generation = """You are an expert in Manim (Community Edition) and its plugins. Your task is to transform a topic for a Manim animation scene into queries that can be used to retrieve relevant documentation from both Manim core and any relevant plugins.
@@ -250,7 +250,7 @@ Scene Technical Implementation:
 2.  **Imports:** Include ALL necessary imports explicitly at the top of the file, based on used Manim classes, functions, colors, and constants. Do not rely on implicit imports. Double-check for required modules, classes, functions, colors, and constants, *ensuring all imports are valid and consistent with the Manim Documentation*.  **Include imports for any used Manim plugins.**
 3.  **Speech Service:** Initialize `KokoroService()`. You MUST import like this: `from src.utils.kokoro_voiceover import KokoroService` as this is our custom voiceover service.
 4.  **Reusable Animations:** Implement functions for each animation sequence to create modular and reusable code. Structure code into well-defined functions, following function definition patterns from Manim Documentation.
-5.  **Voiceover:** Use `with self.voiceover(text="...")` for speech synchronization, precisely matching the narration script and animation timings from the Animation and Narration Plan.
+5.  **Voiceover:** Use `with self.voiceover(text="...")` for speech synchronization, precisely matching the narration script and animation timings from the Animation and Narration Plan. **CRITICAL TTS FORMATTING: The voiceover text must be plain text only with NO asterisks (*) for emphasis, NO colons (:), and NO ellipses (...) for pauses. Create natural pacing by breaking thoughts into separate sentences with periods, using commas for brief pauses, and adding transitional phrases. Use only standard punctuation (periods, commas, question marks, exclamation marks) to ensure proper TTS pronunciation and timing.**
 6.  **Comments:** Add clear and concise comments for complex animations, spatial logic (positioning, arrangements), and object lifecycle management. *Use comments extensively to explain code logic, especially for spatial positioning, animation sequences, and constraint enforcement, mirroring commenting style in Manim Documentation*.  **Add comments to explain the purpose and usage of any Manim plugins.**
 7.  **Error Handling & Constraint Validation:** Implement basic error handling if error handling strategies are suggested or exemplified in the Manim Documentation. **Critically, during code generation, implement explicit checks to validate if each object's position and animation adheres to the safe area margins (0.5 units) and minimum spacing (0.3 units).**
 8.  **Performance:** Follow Manim best practices for efficient code and rendering performance, as recommended in the Manim Documentation.
@@ -487,7 +487,7 @@ Requirements:
 2. Include exact instructions for every code change.
 3. Explain why the error occurred in plain language.
 4. If external assets (e.g., images, audio, video) are referenced, remove them.
-5. **If voiceover is present in the original code, ensure it remains preserved in the corrected code.**
+5. **If voiceover is present in the original code, ensure it remains preserved in the corrected code. CRITICAL TTS FORMATTING: Ensure all voiceover text is plain text only with NO asterisks (*) for emphasis, NO colons (:), and NO ellipses (...) for pauses. Create natural pacing by breaking thoughts into separate sentences with periods, using commas for brief pauses, and adding transitional phrases. Use only standard punctuation (periods, commas, question marks, exclamation marks).**
 6. Preserve all original code that is not causing the reported error. Do not remove or alter any intentional elements unnecessarily.
 7. Follow best practices for code clarity and the current Manim version.
 
@@ -1248,6 +1248,16 @@ You MUST generate a **detailed and comprehensive** animation and narration plan 
     - Provide the full narration script for Scene {scene_number}.
     - **Embed precise animation timing cues** within the narration script (as described before).
     - **CRITICAL: The narration must be CONTINUOUS throughout the entire scene with NO pauses, gaps, or ellipses ("..."). The teacher should be speaking constantly, explaining concepts while animations happen. Do NOT create silent animation-only segments.**
+    - **CRITICAL TTS FORMATTING RULES:**
+        - **NEVER use asterisks (*) for emphasis.** The narration script must be plain text only. Do NOT write *word* or *phrase* as this will be read aloud by TTS as "asterisk word asterisk".
+        - **NEVER use colons (:) in narration.** Colons can cause awkward TTS pronunciation. Instead, rephrase using complete sentences or use commas.
+        - **NEVER use ellipses (...) for pauses.** Ellipses cause timing issues where sentences are read too fast. Instead, create natural pauses by:
+            - **Breaking thoughts into separate sentences.** Use periods to end complete thoughts, which creates natural pauses between ideas.
+            - **Using commas strategically** within sentences to create brief pauses for breath and comprehension.
+            - **Adding transitional phrases** like "Now," "Next," "Let's consider," "Notice that," which naturally slow down the pacing.
+            - **Structuring longer explanations** as multiple shorter sentences rather than one long run-on sentence.
+        - **Use only plain text with standard punctuation** (periods, commas, question marks, exclamation marks).
+        - **Example of good pacing:** Instead of "We can see the function grows... and as x increases... the value of y increases too..." write "We can see the function grows. As x increases, the value of y increases too. Notice how the slope remains constant."
     - **The script should be written as if delivered by a knowledgeable and engaging lecturer.** It should:
         - **Clearly explain concepts step-by-step.**
         - **Use analogies and real-world examples to enhance understanding.**
@@ -1470,7 +1480,7 @@ The Proto-TCM must be a JSON list of objects. Each object represents a single, f
 For each event object, you MUST provide the following keys:
 - "estimatedDuration": YOUR BEST ESTIMATE in seconds for THIS EVENT ALONE. For narration, estimate based on a natural speaking pace (approx 2.5 words/sec). The duration should match the length of the narration text, NOT the animation duration.
 - "conceptName": A short, descriptive title for the event (e.g., "Introduce Linear Growth", "Explain Swap Process", "Summarize Key Points").
-- "narrationText": The EXACT narration script for this event from the Animation & Narration Plan. This field MUST ALWAYS contain actual narration text - NEVER use empty strings, "...", or placeholder text. Split the full narration into natural segments that flow continuously without gaps.
+- "narrationText": The EXACT narration script for this event from the Animation & Narration Plan. This field MUST ALWAYS contain actual narration text - NEVER use empty strings, "...", or placeholder text. Split the full narration into natural segments that flow continuously without gaps. **CRITICAL TTS FORMATTING: The narration text must be plain text only with NO asterisks (*) for emphasis, NO colons (:), and NO ellipses (...) for pauses. Create natural pacing by breaking thoughts into separate sentences with periods, using commas for brief pauses, and adding transitional phrases. Use only standard punctuation (periods, commas, question marks, exclamation marks).**
 - "visualDescription": A brief description of what is happening visually during this event, synthesized from the Vision & Storyboard plan.
 
 Analyze the following documents for Scene {i} of the video about "{topic}" and generate ONLY the JSON output for the Proto-TCM inside ```json ... ``` tags.

@@ -2712,25 +2712,7 @@ async def main_page():
                 "hover:shadow-md border border-gray-200 dark:border-gray-700"
             ).props("dense"):
                 ui.separator().classes("bg-gradient-to-r from-primary/30 via-primary/10 to-transparent").style("margin: 0; height: 1px;")
-                with ui.column().classes("w-full gap-3 px-3 pt-2 pb-3"):
-                    # Max Retries slider with label
-                    with ui.column().classes("w-full gap-1"):
-                        with ui.row().classes("items-center gap-2").style("margin-bottom: 24px;"):
-                            ui.icon("refresh", size="sm").classes("text-primary")
-                            ui.label("Code Fix Retries").classes("text-sm font-semibold text-primary dark:text-primary")
-                        
-                        ui.slider(
-                            min=1, 
-                            max=10, 
-                            step=1,
-                            value=app_state["max_retries"]
-                        ).bind_value(app_state, "max_retries").props(
-                            "color=primary label-always"
-                        ).classes("w-full")
-                        
-                        with ui.row().classes("items-center gap-1 mt-1"):
-                            ui.icon("info", size="xs").classes("text-blue-500")
-                            ui.label("Maximum retries to fix errors").classes("text-xs text-gray-500 dark:text-gray-400")
+                # Max retries is now fixed at 5 (no UI control needed)
         
         # Sidebar Footer with quick actions and primary accent - fixed at bottom
         with ui.row().classes("w-full items-center justify-between px-4 py-2 border-t-2 border-primary/30 dark:border-primary/40").style("flex-shrink: 0; position: sticky; bottom: 0; z-index: 10; backdrop-filter: blur(10px); background: linear-gradient(0deg, rgba(255,75,75,0.03) 0%, transparent 100%);"):
@@ -2983,7 +2965,6 @@ async def main_page():
             with ui.tabs().classes("w-full bg-transparent").props("dense align=left") as inspector_tabs:
                 t_video = ui.tab("🎬 Player").props("no-caps")
                 t_plan = ui.tab("📖 Master Plan").props("no-caps")
-                t_tcm = ui.tab("🗺️ TCM Data").props("no-caps")
                 scene_tabs_list = [
                     ui.tab(f"🎞️ Scene {i+1}").props("no-caps") for i in range(len(scene_dirs))
                 ]
@@ -3113,6 +3094,173 @@ async def main_page():
                                         # Create a container for dynamic content (this will be cleared)
                                         quiz_content_container = ui.column().classes("w-full gap-3")
                                         
+                                        # Define helper functions at the proper scope
+                                        def show_question():
+                                            """Display the current question"""
+                                            try:
+                                                quiz_content_container.clear()
+                                                
+                                                if quiz_state["current_index"] >= len(quiz_state["questions"]):
+                                                    # Quiz completed - celebration card
+                                                    with quiz_content_container:
+                                                        with ui.card().classes("w-full border-0 shadow-2xl").style("background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-left: 4px solid #10b981; padding: 40px;"):
+                                                            with ui.column().classes("items-center gap-4 w-full"):
+                                                                with ui.avatar(size="xl").classes("shadow-lg").style("background: linear-gradient(135deg, #10b981 0%, #059669 100%);"):
+                                                                    ui.icon("emoji_events", size="lg").classes("text-white")
+                                                                ui.label("Quiz Completed!").classes("text-2xl font-bold text-green-900")
+                                                                ui.label("Great job reviewing the content!").classes("text-base text-green-800")
+                                                                ui.separator().classes("bg-green-300 w-24 my-2")
+                                                                ui.label(f"You answered {len(quiz_state['questions'])} questions").classes("text-sm text-green-700")
+                                                                ui.button("Start New Quiz", on_click=lambda: (
+                                                                    quiz_state.update({"quiz_started": False, "current_index": 0, "questions": []}),
+                                                                    show_quiz_setup()
+                                                                ), icon="refresh").props("unelevated no-caps").classes("shadow-md mt-3").style("background: linear-gradient(135deg, #FF4B4B 0%, #FF6B6B 100%); border-radius: 8px; padding: 10px 20px; font-size: 0.875rem;")
+                                                    return
+                                                
+                                                q = quiz_state["questions"][quiz_state["current_index"]]
+                                                
+                                                with quiz_content_container:
+                                                    # Progress indicator - modern design
+                                                    progress_percent = int(((quiz_state['current_index'] + 1) / len(quiz_state['questions'])) * 100)
+                                                    with ui.card().classes("w-full border-0 shadow-sm mb-4").style("background: linear-gradient(135deg, rgba(255, 75, 75, 0.05) 0%, rgba(255, 107, 107, 0.02) 100%); padding: 16px;"):
+                                                        with ui.row().classes("w-full items-center justify-between"):
+                                                            with ui.row().classes("items-center gap-2"):
+                                                                ui.icon("quiz", size="sm").classes("text-primary")
+                                                                ui.label(f"Question {quiz_state['current_index'] + 1} of {len(quiz_state['questions'])}").classes("text-sm font-bold text-gray-700 dark:text-gray-300")
+                                                            with ui.row().classes("items-center gap-2"):
+                                                                ui.label(f"{progress_percent}%").classes("text-xs font-semibold text-primary")
+                                                                ui.linear_progress(
+                                                                    value=(quiz_state['current_index'] + 1) / len(quiz_state['questions']),
+                                                                    show_value=False
+                                                                ).props("color=primary size=8px").classes("w-32")
+                                                
+                                                    # Question card - modern professional style
+                                                    with ui.card().classes("w-full border-0 shadow-xl").style("background: #ffffff; border: 1px solid #e6e9ef; padding: 24px;"):
+                                                        with ui.column().classes("gap-4 w-full"):
+                                                            # Question text
+                                                            ui.label(q["question"]).classes("text-base font-semibold text-gray-900 dark:text-white mb-2")
+                                                            
+                                                            if not quiz_state["show_answer"]:
+                                                                # Show options - matching AI Tutor suggestion button style
+                                                                ui.separator().classes("my-2")
+                                                                for idx, option in enumerate(q.get("options", [])):
+                                                                    with ui.button(
+                                                                        on_click=lambda opt=option: handle_answer(opt)
+                                                                    ).props("outline no-caps").classes("w-full hover:bg-primary/5 mb-2").style("justify-content: flex-start; padding: 12px 16px; border-radius: 8px; border-color: rgba(255, 75, 75, 0.2);"):
+                                                                        with ui.row().classes("items-center gap-3 w-full").style("flex-wrap: nowrap;"):
+                                                                            with ui.avatar(size="sm").classes("text-xs font-bold").style(f"background: linear-gradient(135deg, rgba(255, 75, 75, 0.1) 0%, rgba(255, 107, 107, 0.05) 100%); color: #FF4B4B;"):
+                                                                                ui.label(chr(65 + idx))  # A, B, C, D
+                                                                            ui.label(option).classes("text-sm text-gray-700 dark:text-gray-300 flex-grow text-left")
+                                                            else:
+                                                                # Show answer and explanation - modern professional style
+                                                                ui.separator().classes("my-3")
+                                                                with ui.card().classes("w-full border-0 shadow-lg").style("background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-left: 4px solid #10b981; padding: 20px;"):
+                                                                    with ui.column().classes("gap-3 w-full"):
+                                                                        with ui.row().classes("items-center gap-2 mb-2"):
+                                                                            ui.icon("check_circle", size="md").classes("text-green-700")
+                                                                            ui.label("Correct Answer").classes("font-bold text-base text-green-900")
+                                                                        ui.label(q["correct_answer"]).classes("text-base font-semibold text-green-800 ml-8")
+                                                                        
+                                                                        if q.get("explanation"):
+                                                                            ui.separator().classes("bg-green-300 my-2")
+                                                                            with ui.row().classes("items-start gap-2"):
+                                                                                ui.icon("lightbulb", size="sm").classes("text-green-700 flex-shrink-0").style("margin-top: 2px;")
+                                                                                with ui.column().classes("gap-1 flex-grow"):
+                                                                                    ui.label("Explanation").classes("font-bold text-sm text-green-800")
+                                                                                    ui.label(q["explanation"]).classes("text-sm text-green-700")
+                                                                
+                                                                # Navigation buttons - modern style
+                                                                with ui.row().classes("w-full justify-end gap-2 mt-3"):
+                                                                    ui.button(
+                                                                        "Next Question" if quiz_state["current_index"] < len(quiz_state["questions"]) - 1 else "Finish Quiz",
+                                                                        on_click=lambda: (
+                                                                            quiz_state.update({"current_index": quiz_state["current_index"] + 1, "show_answer": False}),
+                                                                            show_question()
+                                                                        ),
+                                                                        icon="arrow_forward"
+                                                                    ).props("unelevated no-caps").classes("shadow-md").style("background: linear-gradient(135deg, #FF4B4B 0%, #FF6B6B 100%); border-radius: 8px; padding: 10px 20px; font-size: 0.875rem;")
+                                            except Exception as e:
+                                                print(f"ERROR in show_question: {e}")
+                                                import traceback
+                                                traceback.print_exc()
+                                        
+                                        def handle_answer(selected):
+                                            """Handle user's answer selection"""
+                                            quiz_state["show_answer"] = True
+                                            show_question()
+                                        
+                                        async def generate_quiz_async():
+                                            """Generate quiz questions using LLM"""
+                                            try:
+                                                quiz_content_container.clear()
+                                                
+                                                with quiz_content_container:
+                                                    with ui.card().classes("border-0 shadow-lg").style("width: 100% !important; height: 100%; min-height: 300px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%);"):
+                                                        with ui.column().classes("items-center justify-center gap-3"):
+                                                            ui.spinner(size="lg", color="primary")
+                                                            ui.label("Generating quiz questions...").classes("text-sm font-semibold text-gray-700 dark:text-gray-300")
+                                                            ui.label("This may take a moment").classes("text-xs text-gray-500 dark:text-gray-400")
+                                                
+                                                # Build context from TCM
+                                                context_parts = [f"Video Topic: {topic}\n"]
+                                                if tcm_data:
+                                                    context_parts.append("Video Content Summary:")
+                                                    for entry in tcm_data[:10]:  # Use first 10 entries for context
+                                                        concept = entry.get("conceptName", "")
+                                                        narration = entry.get("narrationText", "")
+                                                        if concept and narration:
+                                                            context_parts.append(f"- {concept}: {narration[:200]}")
+                                                
+                                                context = "\n".join(context_parts)
+                                                
+                                                prompt = f"""Based on this educational video content, generate {quiz_settings["num_questions"]} {quiz_settings["question_type"]} quiz questions at {quiz_settings["difficulty"]} difficulty level.
+
+{context}
+
+Generate questions in this EXACT JSON format:
+[
+{{
+    "question": "Question text here?",
+    "type": "multiple_choice",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correct_answer": "Option A",
+    "explanation": "Brief explanation of why this is correct"
+}}
+]
+
+For True/False questions, use options: ["True", "False"]
+Make questions relevant to the video content and educational."""
+
+                                                quiz_llm = LiteLLMWrapper(model_name=app_state["planner_model_name"])
+                                                response = await asyncio.get_event_loop().run_in_executor(
+                                                    None,
+                                                    lambda: quiz_llm([{"type": "text", "content": prompt}])
+                                                )
+                                                
+                                                # Parse JSON response
+                                                import json
+                                                import re
+                                                json_match = re.search(r'\[.*\]', response, re.DOTALL)
+                                                if json_match:
+                                                    quiz_state["questions"] = json.loads(json_match.group())
+                                                    quiz_state["current_index"] = 0
+                                                    quiz_state["show_answer"] = False
+                                                    quiz_state["quiz_started"] = True
+                                                    show_question()
+                                                else:
+                                                    raise ValueError("Could not parse quiz questions")
+                                                    
+                                            except Exception as e:
+                                                quiz_content_container.clear()
+                                                with quiz_content_container:
+                                                    with ui.card().classes("w-full border-0 shadow-lg").style("background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border-left: 4px solid #ef4444; padding: 24px;"):
+                                                        with ui.column().classes("gap-3 w-full"):
+                                                            with ui.row().classes("items-center gap-2"):
+                                                                ui.icon("error_outline", size="md").classes("text-red-600")
+                                                                ui.label("Error Generating Quiz").classes("text-lg font-bold text-red-900")
+                                                            ui.label(f"{str(e)}").classes("text-sm text-red-700 ml-8")
+                                                            ui.button("Try Again", on_click=show_quiz_setup, icon="refresh").props("unelevated no-caps").classes("shadow-md mt-2").style("background: linear-gradient(135deg, #FF4B4B 0%, #FF6B6B 100%); border-radius: 8px; padding: 10px 16px; font-size: 0.875rem;")
+                                        
                                         def show_quiz_setup():
                                             """Display the initial quiz configuration form"""
                                             try:
@@ -3156,165 +3304,7 @@ async def main_page():
                                                         # Separator
                                                         ui.separator().classes("my-2")
                                                         
-                                                        # Define async function to generate quiz
-                                                        async def generate_quiz_async():
-                                                            quiz_content_container.clear()
-                                                            
-                                                            with quiz_content_container:
-                                                                with ui.card().classes("border-0 shadow-lg").style("width: 100% !important; height: 100%; min-height: 300px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%);"):
-                                                                    with ui.column().classes("items-center justify-center gap-3"):
-                                                                        ui.spinner(size="lg", color="primary")
-                                                                        ui.label("Generating quiz questions...").classes("text-sm font-semibold text-gray-700 dark:text-gray-300")
-                                                                        ui.label("This may take a moment").classes("text-xs text-gray-500 dark:text-gray-400")
-                                                            
-                                                            # Generate questions using LLM
-                                                            try:
-                                                                # Build context from TCM
-                                                                context_parts = [f"Video Topic: {topic}\n"]
-                                                                if tcm_data:
-                                                                    context_parts.append("Video Content Summary:")
-                                                                    for entry in tcm_data[:10]:  # Use first 10 entries for context
-                                                                        concept = entry.get("conceptName", "")
-                                                                        narration = entry.get("narrationText", "")
-                                                                        if concept and narration:
-                                                                            context_parts.append(f"- {concept}: {narration[:200]}")
-                                                                
-                                                                context = "\n".join(context_parts)
-                                                                
-                                                                prompt = f"""Based on this educational video content, generate {quiz_settings["num_questions"]} {quiz_settings["question_type"]} quiz questions at {quiz_settings["difficulty"]} difficulty level.
-
-    {context}
-
-    Generate questions in this EXACT JSON format:
-    [
-    {{
-        "question": "Question text here?",
-        "type": "multiple_choice",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "correct_answer": "Option A",
-        "explanation": "Brief explanation of why this is correct"
-    }}
-    ]
-
-    For True/False questions, use options: ["True", "False"]
-    Make questions relevant to the video content and educational."""
-
-                                                                quiz_llm = LiteLLMWrapper(model_name=app_state["planner_model_name"])
-                                                                response = await asyncio.get_event_loop().run_in_executor(
-                                                                    None,
-                                                                    lambda: quiz_llm([{"type": "text", "content": prompt}])
-                                                                )
-                                                                
-                                                                # Parse JSON response
-                                                                import json
-                                                                import re
-                                                                json_match = re.search(r'\[.*\]', response, re.DOTALL)
-                                                                if json_match:
-                                                                    quiz_state["questions"] = json.loads(json_match.group())
-                                                                    quiz_state["current_index"] = 0
-                                                                    quiz_state["show_answer"] = False
-                                                                    quiz_state["quiz_started"] = True
-                                                                    show_question()
-                                                                else:
-                                                                    raise ValueError("Could not parse quiz questions")
-                                                                
-                                                            except Exception as e:
-                                                                quiz_content_container.clear()
-                                                                with quiz_content_container:
-                                                                    with ui.card().classes("w-full border-0 shadow-lg").style("background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border-left: 4px solid #ef4444; padding: 24px;"):
-                                                                        with ui.column().classes("gap-3 w-full"):
-                                                                            with ui.row().classes("items-center gap-2"):
-                                                                                ui.icon("error_outline", size="md").classes("text-red-600")
-                                                                                ui.label("Error Generating Quiz").classes("text-lg font-bold text-red-900")
-                                                                            ui.label(f"{str(e)}").classes("text-sm text-red-700 ml-8")
-                                                                            ui.button("Try Again", on_click=show_quiz_setup, icon="refresh").props("unelevated no-caps").classes("shadow-md mt-2").style("background: linear-gradient(135deg, #FF4B4B 0%, #FF6B6B 100%); border-radius: 8px; padding: 10px 16px; font-size: 0.875rem;")
-                                                        
-                                                        def show_question():
-                                                            quiz_content_container.clear()
-                                                            
-                                                            if quiz_state["current_index"] >= len(quiz_state["questions"]):
-                                                                # Quiz completed - celebration card
-                                                                with quiz_content_container:
-                                                                    with ui.card().classes("w-full border-0 shadow-2xl").style("background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-left: 4px solid #10b981; padding: 40px;"):
-                                                                        with ui.column().classes("items-center gap-4 w-full"):
-                                                                            with ui.avatar(size="xl").classes("shadow-lg").style("background: linear-gradient(135deg, #10b981 0%, #059669 100%);"):
-                                                                                ui.icon("emoji_events", size="lg").classes("text-white")
-                                                                            ui.label("Quiz Completed!").classes("text-2xl font-bold text-green-900")
-                                                                            ui.label("Great job reviewing the content!").classes("text-base text-green-800")
-                                                                            ui.separator().classes("bg-green-300 w-24 my-2")
-                                                                            ui.label(f"You answered {len(quiz_state['questions'])} questions").classes("text-sm text-green-700")
-                                                                            ui.button("Start New Quiz", on_click=lambda: (
-                                                                                quiz_state.update({"quiz_started": False, "current_index": 0, "questions": []}),
-                                                                                show_quiz_setup()
-                                                                            ), icon="refresh").props("unelevated no-caps").classes("shadow-md mt-3").style("background: linear-gradient(135deg, #FF4B4B 0%, #FF6B6B 100%); border-radius: 8px; padding: 10px 20px; font-size: 0.875rem;")
-                                                                return
-                                                            
-                                                            q = quiz_state["questions"][quiz_state["current_index"]]
-                                                            
-                                                            with quiz_content_container:
-                                                                # Progress indicator - modern design
-                                                                with ui.card().classes("w-full border-0 shadow-sm mb-4").style("background: linear-gradient(135deg, rgba(255, 75, 75, 0.05) 0%, rgba(255, 107, 107, 0.02) 100%); padding: 16px;"):
-                                                                    with ui.row().classes("w-full items-center justify-between"):
-                                                                        with ui.row().classes("items-center gap-2"):
-                                                                            ui.icon("quiz", size="sm").classes("text-primary")
-                                                                            ui.label(f"Question {quiz_state['current_index'] + 1} of {len(quiz_state['questions'])}").classes("text-sm font-bold text-gray-700 dark:text-gray-300")
-                                                                        ui.linear_progress(
-                                                                            value=(quiz_state['current_index'] + 1) / len(quiz_state['questions'])
-                                                                        ).props("color=primary size=8px").classes("w-32")
-                                                            
-                                                            # Question card - modern professional style
-                                                            with ui.card().classes("w-full border-0 shadow-xl").style("background: #ffffff; border: 1px solid #e6e9ef; padding: 24px;"):
-                                                                with ui.column().classes("gap-4 w-full"):
-                                                                    # Question text with icon
-                                                                    with ui.row().classes("items-start gap-3 mb-2"):
-                                                                        ui.icon("help_outline", size="md").classes("text-primary flex-shrink-0").style("margin-top: 2px;")
-                                                                        ui.label(q["question"]).classes("text-base font-semibold text-gray-900 dark:text-white flex-grow")
-                                                                    
-                                                                    if not quiz_state["show_answer"]:
-                                                                        # Show options - matching AI Tutor suggestion button style
-                                                                        ui.separator().classes("my-2")
-                                                                        for idx, option in enumerate(q.get("options", [])):
-                                                                            with ui.button(
-                                                                                on_click=lambda opt=option: handle_answer(opt)
-                                                                            ).props("outline no-caps").classes("w-full hover:bg-primary/5 mb-2").style("justify-content: flex-start; padding: 12px 16px; border-radius: 8px; border-color: rgba(255, 75, 75, 0.2);"):
-                                                                                with ui.row().classes("items-center gap-3 w-full").style("flex-wrap: nowrap;"):
-                                                                                    with ui.avatar(size="sm").classes("text-xs font-bold").style(f"background: linear-gradient(135deg, rgba(255, 75, 75, 0.1) 0%, rgba(255, 107, 107, 0.05) 100%); color: #FF4B4B;"):
-                                                                                        ui.label(chr(65 + idx))  # A, B, C, D
-                                                                                    ui.label(option).classes("text-sm text-gray-700 dark:text-gray-300 flex-grow text-left")
-                                                                    else:
-                                                                        # Show answer and explanation - modern professional style
-                                                                        ui.separator().classes("my-3")
-                                                                        with ui.card().classes("w-full border-0 shadow-lg").style("background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-left: 4px solid #10b981; padding: 20px;"):
-                                                                            with ui.column().classes("gap-3 w-full"):
-                                                                                with ui.row().classes("items-center gap-2 mb-2"):
-                                                                                    ui.icon("check_circle", size="md").classes("text-green-700")
-                                                                                    ui.label("Correct Answer").classes("font-bold text-base text-green-900")
-                                                                                ui.label(q["correct_answer"]).classes("text-base font-semibold text-green-800 ml-8")
-                                                                                
-                                                                                if q.get("explanation"):
-                                                                                    ui.separator().classes("bg-green-300 my-2")
-                                                                                    with ui.row().classes("items-start gap-2"):
-                                                                                        ui.icon("lightbulb", size="sm").classes("text-green-700 flex-shrink-0").style("margin-top: 2px;")
-                                                                                        with ui.column().classes("gap-1 flex-grow"):
-                                                                                            ui.label("Explanation").classes("font-bold text-sm text-green-800")
-                                                                                            ui.label(q["explanation"]).classes("text-sm text-green-700")
-                                                                        
-                                                                        # Navigation buttons - modern style
-                                                                        with ui.row().classes("w-full justify-end gap-2 mt-3"):
-                                                                            ui.button(
-                                                                                "Next Question" if quiz_state["current_index"] < len(quiz_state["questions"]) - 1 else "Finish Quiz",
-                                                                                on_click=lambda: (
-                                                                                    quiz_state.update({"current_index": quiz_state["current_index"] + 1, "show_answer": False}),
-                                                                                    show_question()
-                                                                                ),
-                                                                                icon="arrow_forward"
-                                                                            ).props("unelevated no-caps").classes("shadow-md").style("background: linear-gradient(135deg, #FF4B4B 0%, #FF6B6B 100%); border-radius: 8px; padding: 10px 20px; font-size: 0.875rem;")
-                                                    
-                                                        def handle_answer(selected):
-                                                            quiz_state["show_answer"] = True
-                                                            show_question()
-                                                        
-                                                        # Generate Button - Row 3 (at card level, OUTSIDE function definitions)
+                                                        # Generate Button
                                                         ui.button(
                                                             "Generate Quiz",
                                                             on_click=generate_quiz_async,
@@ -3938,7 +3928,7 @@ async def main_page():
                             ui.icon("video_camera_back", size="4rem").classes("text-gray-300 dark:text-gray-600 mb-4")
                             ui.label("Video Not Generated Yet").classes("text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2")
                             ui.label(
-                                "Use the Utilities tab to finalize and generate the video for this project."
+                                "Use the Utilities tab to continue and complete the video generation for this project."
                             ).classes("text-gray-500 dark:text-gray-500 mb-4")
                             ui.button("Go to Utilities", icon="build", on_click=lambda: main_tabs.set_value("🔧 Utilities")).props("unelevated no-caps").classes("mt-2")
 
@@ -4009,30 +3999,6 @@ async def main_page():
                             ui.label("Plan Not Available").classes("text-xl font-semibold text-gray-600 dark:text-gray-400")
                             ui.label("The video plan hasn't been generated yet").classes("text-sm text-gray-500 dark:text-gray-500 mt-2")
 
-                with ui.tab_panel(t_tcm):
-                    tcm_path = os.path.join(
-                        project_path, f"{inner_folder_name}_combined_tcm.json"
-                    )
-                    if os.path.exists(tcm_path):
-                        with ui.card().classes("w-full shadow-lg border-l-4 border-primary"):
-                            with ui.row().classes("w-full items-center gap-2 p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800"):
-                                ui.icon("data_object", size="sm").classes("text-primary")
-                                ui.label("Temporal Concept Map (TCM)").classes("text-lg font-semibold")
-                                ui.space()
-                                ui.label("Read-only").classes("text-xs text-gray-500 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded")
-                            with ui.column().classes("p-4"):
-                                with open(tcm_path, "r", encoding="utf-8") as f:
-                                    ui.json_editor(
-                                        {
-                                            "content": {"json": json.load(f)},
-                                            "readOnly": True,
-                                        }
-                                    ).classes("w-full").style("min-height: 500px;")
-                    else:
-                        with ui.card().classes("w-full p-12 text-center"):
-                            ui.icon("data_object", size="4rem").classes("text-gray-300 dark:text-gray-600 mb-4")
-                            ui.label("TCM Not Generated Yet").classes("text-xl font-semibold text-gray-600 dark:text-gray-400")
-
                 for i, scene_dir_name in enumerate(scene_dirs):
                     with ui.tab_panel(scene_tabs_list[i]):
                         scene_num = i + 1
@@ -4044,7 +4010,6 @@ async def main_page():
                                 ui.icon("movie_filter", size="md").classes("text-secondary")
                                 ui.label(f"Scene {scene_num}").classes("text-xl font-bold ml-2")
                                 ui.space()
-                                ui.label(scene_dir_name).classes("text-sm text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full")
 
                         with ui.tabs().props("dense align=left").classes("w-full") as asset_tabs:
                             at_vision = ui.tab("🗺️ Vision").props("no-caps")
@@ -4086,7 +4051,7 @@ async def main_page():
                                         "### 🎨 Animation Strategy",
                                     )
                                     plan_text = plan_text.replace(
-                                        "[NARRATION]", "### 🎙️ Narration"
+                                        "[NARRATION]", "### 🎞️ Animation"
                                     )
 
                                     with ui.card().classes("w-full shadow-md"):
@@ -4516,26 +4481,6 @@ async def main_page():
                     with ui.row().classes("w-full items-center gap-2 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg"):
                         ui.icon("check_circle", size="md").classes("text-green-600")
                         ui.label("All projects are complete! 🎉").classes("text-green-700 dark:text-green-300 font-medium")
-            
-            # Finalize Projects Section
-            with ui.card().classes("w-full").style("padding: 24px;"):
-                with ui.row().classes("w-full items-center gap-3 mb-4"):
-                    ui.icon("video_library", size="lg").classes("text-primary")
-                    with ui.column().classes("gap-1"):
-                        ui.label("Finalize Projects").classes("text-xl font-bold text-gray-900 dark:text-white")
-                        ui.label("Combine rendered scenes into final video with subtitles").classes("text-sm text-gray-600 dark:text-gray-400")
-                
-                util_select = ui.select(
-                    topic_folders_util, 
-                    label="Select Project to Finalize"
-                ).props("outlined").classes("w-full")
-                
-                finalize_button = ui.button(
-                    "🎬 Finalize Project",
-                    on_click=lambda: handle_finalize(util_select.value),
-                ).props("unelevated no-caps").classes("w-full mt-2")
-                
-                finalized_video_player = ui.video("").classes("w-full rounded-lg mt-4").style("display: none;")
 
     # --- Main Content Area (UI Definition) ---
     with ui.column().classes("w-full max-w-6xl mx-auto gap-6").style("padding: 24px 16px;"):
@@ -4575,8 +4520,8 @@ async def main_page():
                             # Tips Card (right side) - aligned to bottom
                             with ui.card().classes("flex-shrink-0").style("padding: 10px 14px; background-color: #fffbeb; border: 1px solid #fef3c7; width: 320px;"):
                                 with ui.row().classes("items-center gap-2"):
-                                    ui.icon("tips_and_updates", size="sm").classes("text-amber-600")
-                                    ui.label("💡 More details = better video!").classes("text-xs text-amber-900 dark:text-amber-100 font-medium")
+                                    ui.icon("tips_and_updates", size="sm").classes("text-primary")
+                                    ui.label("More details = better video!").classes("text-xs font-medium")
                         
                         # Description Section
                         with ui.column().classes("w-full").style("gap: 8px;"):
@@ -4971,7 +4916,7 @@ Style: Use simple animations, friendly tone, and a relatable analogy (like guess
                             ui.icon("build_circle", size="xl").classes("text-white")
                             with ui.column().classes("gap-1"):
                                 ui.label("Utilities").classes("text-3xl font-bold text-white")
-                                ui.label("Finalize and manage your video projects").classes("text-white/80")
+                                ui.label("Continue and manage your video projects").classes("text-white/80")
                     
                     util_content = ui.column().classes("w-full mt-4")
     

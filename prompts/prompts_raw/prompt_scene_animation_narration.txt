@@ -77,6 +77,7 @@ You MUST generate a **detailed and comprehensive** animation and narration plan 
     - **CRITICAL: The narration must be CONTINUOUS throughout the entire scene with NO pauses, gaps, or ellipses ("..."). The teacher should be speaking constantly, explaining concepts while animations happen. Do NOT create silent animation-only segments.**
     - **CRITICAL TTS FORMATTING RULES:**
         - **NEVER use asterisks (*) for emphasis.** The narration script must be plain text only. Do NOT write *word* or *phrase* as this will be read aloud by TTS as "asterisk word asterisk".
+        - **NEVER use colons (:) in narration.** Colons can cause awkward TTS pronunciation. Instead, rephrase using complete sentences or use commas.
         - **NEVER use ellipses (...) for pauses.** Ellipses cause timing issues where sentences are read too fast. Instead, create natural pauses by:
             - **Breaking thoughts into separate sentences.** Use periods to end complete thoughts, which creates natural pauses between ideas.
             - **Using commas strategically** within sentences to create brief pauses for breath and comprehension.
