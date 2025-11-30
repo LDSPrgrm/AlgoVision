@@ -1,0 +1,168 @@
+# Manim Configuration System
+
+## Overview
+The global config object is an instance of ManimConfig class and acts as a single source of truth for all customizable behavior in Manim. It digests configuration from multiple sources in ascending order of precedence:
+1. Configuration files (.cfg)
+2. Command line arguments
+3. Programmatic changes
+
+## Accessing Config Options
+
+### Two Equivalent Syntaxes
+```python
+from manim import config
+
+# Attribute syntax (preferred)
+config.background_color = WHITE
+config.frame_height = 10.0
+
+# Dict syntax (backwards compatibility)
+config["background_color"] = WHITE
+config["frame_height"] = 10.0
+```
+
+## Key Configuration Properties
+
+### Frame and Resolution
+- `frame_width` - Frame width in logical units
+- `frame_height` - Frame height in logical units
+- `frame_x_radius` - Half the frame width
+- `frame_y_radius` - Half the frame height
+- `pixel_width` - Frame width in pixels
+- `pixel_height` - Frame height in pixels
+- `aspect_ratio` - Width/height ratio in pixels
+- `frame_size` - Tuple (pixel_width, pixel_height)
+
+### Coordinates
+- `top` - Coordinate at center top of frame
+- `bottom` - Coordinate at center bottom of frame
+- `left_side` - Coordinate at middle left of frame
+- `right_side` - Coordinate at middle right of frame
+
+### Visual Settings
+- `background_color` - Background color of scene
+- `background_opacity` - Float between 0.0 (transparent) and 1.0 (opaque)
+- `transparent` - Whether background opacity is 0.0
+
+### Output Settings
+- `quality` - Video quality (e.g., "1080p60", "480p15")
+- `frame_rate` - Frame rate in frames per second
+- `format` - File format: "png", "gif", "mp4", "webm", or "mov"
+- `movie_file_extension` - Either .mp4, .webm, or .mov
+- `output_file` - Output file name
+
+### Rendering Control
+- `preview` - Whether to play rendered movie
+- `write_to_movie` - Whether to render scene to movie file
+- `save_last_frame` - Whether to save last frame as image
+- `save_pngs` - Whether to save all frames as images
+- `save_as_gif` - Whether to save as .gif format
+- `write_all` - Whether to render all scenes in input file
+
+### Directory Paths
+- `media_dir` - Main output directory
+- `video_dir` - Directory for videos
+- `images_dir` - Directory for images
+- `tex_dir` - Directory for tex files
+- `text_dir` - Directory for text files
+- `log_dir` - Directory for logs
+- `assets_dir` - Directory to locate video assets
+- `partial_movie_dir` - Directory for partial movie files
+- `sections_dir` - Directory for section videos
+
+Use `config.get_dir(key, **kwargs)` to resolve directory paths that may contain placeholders.
+
+### Animation Control
+- `from_animation_number` - Start rendering at this animation number
+- `upto_animation_number` - Stop rendering at this animation number (use -1 to render all)
+
+### Caching
+- `disable_caching` - Whether to disable scene caching
+- `flush_cache` - Whether to delete cached partial movie files
+- `max_files_cached` - Maximum cached files (use -1 for infinity)
+
+### LaTeX/Text
+- `tex_template` - Template for rendering Tex
+- `tex_template_file` - File to read Tex template from
+- `no_latex_cleanup` - Prevents deletion of .aux, .dvi, .log files
+
+### Renderer Settings
+- `renderer` - Currently active renderer (RendererType enum)
+- `enable_gui` - Enable GUI interaction
+- `enable_wireframe` - Enable wireframe debugging in OpenGL
+- `force_window` - Force window with OpenGL renderer
+- `window_size` - Size of OpenGL window
+- `window_position` - Position of preview window (e.g., "UL", "DR", "960,540")
+- `window_monitor` - Monitor for rendering
+- `fullscreen` - Expand window to maximum size
+
+### Logging and Debug
+- `verbosity` - Logger level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+- `log_to_file` - Whether to save logs to file
+- `progress_bar` - Whether to show progress bars
+- `dry_run` - Whether dry run is enabled
+
+### FFmpeg
+- `ffmpeg_executable` - Custom path to ffmpeg
+- `ffmpeg_loglevel` - FFmpeg verbosity level
+
+### Miscellaneous
+- `input_file` - Input file name
+- `scene_names` - List of scenes to play from file
+- `custom_folders` - Whether to use custom folder output
+- `zero_pad` - PNG zero padding (0-9)
+- `plugins` - List of plugins to enable
+- `notify_outdated_version` - Whether to notify of updates
+
+## Temporary Configuration Changes
+
+Use `tempconfig()` context manager to temporarily modify config:
+
+```python
+from manim import config, tempconfig
+
+print(config.frame_height)  # 8.0
+
+with tempconfig({"frame_height": 100.0}):
+    print(config.frame_height)  # 100.0
+    # Modified config used here
+
+print(config.frame_height)  # 8.0 (restored)
+```
+
+## Internal Consistency
+
+Config options maintain internal consistency. For example:
+```python
+config.frame_height  # 8.0
+config.frame_y_radius = 5.0
+config.frame_height  # 10.0 (automatically updated)
+```
+
+## Configuration Methods
+
+### Copying Config
+```python
+new_config = config.copy()  # Deep copy with no shared references
+```
+
+### Updating Config
+```python
+config.update(other_config)  # Update from another ManimConfig or dict
+```
+
+### Processing Config Files
+```python
+config.digest_file("path/to/manim.cfg")  # Process single .cfg file
+config.digest_parser(parser)  # Process ConfigParser object
+config.digest_args(args)  # Process CLI arguments
+```
+
+## Best Practices
+
+1. Use attribute syntax over dict syntax for clarity
+2. Use `tempconfig()` for temporary changes to avoid side effects
+3. Set config options at the beginning of your script before scene definitions
+4. Use `config.get_dir()` to resolve directory paths with placeholders
+5. Remember precedence: config files < CLI args < programmatic changes
+6. Config changes within scene scripts override all other sources

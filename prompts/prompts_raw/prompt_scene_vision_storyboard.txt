@@ -30,6 +30,7 @@ The following manim plugins are relevant to the scene:
 *   Provide detailed visual descriptions in Manim terms to guide human implementation.
 *   Prioritize explanation and visualization of the theorem. Do not include any promotional elements or quiz sessions.
 *   Minimize text usage - rely primarily on visual elements, mathematical notation, and animations to convey concepts. Use text sparingly and only when necessary for clarity.
+*   **Code Display Requirement:** If the scene includes displaying code (programming examples, algorithms, pseudocode, etc.), the code MUST be presented in a proper code block format using Manim's `Code` class with appropriate syntax highlighting and formatting. Do NOT display code as plain text using `Tex` or `Text` objects.
 
 **Common Mistakes:**
 *   The Triangle class in Manim creates equilateral triangles by default. To create a right-angled triangle, use the Polygon class instead.

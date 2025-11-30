@@ -281,6 +281,7 @@ class VideoPlanner:
                 self.output_dir, topic, file_prefix, f"{file_prefix}_scene_outline.txt"
             ),
             "w",
+            encoding="utf-8",
         ) as f:
             f.write(scene_outline)
         print(f"Plan saved.")
@@ -567,6 +568,7 @@ class VideoPlanner:
         with open(
             os.path.join(scene_dir, f"{file_prefix}_scene{i}_implementation_plan.txt"),
             "w",
+            encoding="utf-8",
         ) as f:
             f.write(f"# Scene {i} Implementation Plan\n\n{implementation_plan}")
         print(f"Scene {i} Combined Implementation Plan saved.")

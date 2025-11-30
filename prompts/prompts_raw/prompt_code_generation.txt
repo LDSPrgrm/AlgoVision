@@ -40,9 +40,10 @@ Scene Technical Implementation:
 15. **Background:** Default background (Black) is sufficient. Do not create custom color background Rectangles.
 16. **Text Color:** Do not use BLACK color for any text. Use predefined colors (BLUE_C, BLUE_D, GREEN_C, GREEN_D, GREY_A, GREY_B, GREY_C, LIGHTER_GRAY, LIGHT_GRAY, GOLD_C, GOLD_D, PURPLE_C, TEAL_C, TEAL_D, WHITE).
 17. **Default Colors:** You MUST use the provided color definitions if you use colors in your code. ONLY USE THE COLORS PREVIOUSLY DEFINED.
-18. **Animation Timings and Narration Sync (CRITICAL)**: Your primary source for all animation run_time values MUST be the estimatedDuration from the Proto-TCM provided in the Input Context. Each self.play(...) call must have a run_time argument that exactly matches the corresponding duration in the Proto-TCM. The total duration of animations within a with self.voiceover(...) as tracker: block should approximate tracker.duration, achieved by correctly summing the individual run_time values from the Proto-TCM. Use Wait() for pauses.
-19. **Don't be lazy on code generation:** Generate full, complete code including all helper functions. Ensure that the output is comprehensive and the code is fully functional, incorporating all necessary helper methods and complete scene implementation details.
-20. **LaTeX Package Handling:** If the technical implementation plan specifies the need for additional LaTeX packages:
+18. **Code Display (CRITICAL):** If the scene requires displaying code (programming examples, algorithms, pseudocode, etc.), you MUST use Manim's `Code` class with proper syntax highlighting. Import it with `from manim import Code`. Specify the code content, programming language (e.g., language="python", language="java"), background color (e.g., background="window"), font size, and positioning. Example: `code_block = Code(code="def hello():\n    print('Hello')", language="python", background="window", font_size=24)`. Do NOT use `Tex`, `MathTex`, or `Text` objects to display code.
+19. **Animation Timings and Narration Sync (CRITICAL)**: Your primary source for all animation run_time values MUST be the estimatedDuration from the Proto-TCM provided in the Input Context. Each self.play(...) call must have a run_time argument that exactly matches the corresponding duration in the Proto-TCM. The total duration of animations within a with self.voiceover(...) as tracker: block should approximate tracker.duration, achieved by correctly summing the individual run_time values from the Proto-TCM. Use Wait() for pauses.
+20. **Don't be lazy on code generation:** Generate full, complete code including all helper functions. Ensure that the output is comprehensive and the code is fully functional, incorporating all necessary helper methods and complete scene implementation details.
+21. **LaTeX Package Handling:** If the technical implementation plan specifies the need for additional LaTeX packages:
     *   Create a `TexTemplate` object.
     *   Use `myTemplate = TexTemplate()`
     *   Use `myTemplate.add_to_preamble(r"\\usepackage{{package_name}}")` to add the required package.
@@ -111,6 +112,19 @@ class Scene{scene_number}_Helper:  # Example: class Scene1_Helper:
         else:
             formula = MathTex(formula_str, color=color)
         return formula
+
+    def create_code_block(self, code_str, language="python", font_size=24):
+        # Example function to create a Code block with syntax highlighting.
+        # Use this for displaying programming code, algorithms, or pseudocode.
+        code_block = Code(
+            code=code_str,
+            language=language,
+            background="window",
+            font_size=font_size,
+            insert_line_no=True,
+            style="monokai"
+        )
+        return code_block
 
     # ... (add more helper functions as needed for object creation and scene logic)
 

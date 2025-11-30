@@ -33,6 +33,7 @@ The following manim plugins are relevant to the scene:
 *   Ensure animations create a clear and logical visual flow, **optimized for learning and concept understanding.**
 *   Use animation pacing and transition buffers to visually separate ideas and **enhance pedagogical clarity.**
 *   Maintain spatial coherence for predictable and understandable animations, strictly adhering to spatial constraints.
+*   **Code Display:** If the scene includes code examples, ensure they are displayed using Manim's `Code` class with proper syntax highlighting, not as plain text. Plan animations that highlight specific lines or sections of code as they are explained in the narration.
 
 **Diagrams/Sketches (Optional but Highly Recommended for Complex Scenes):**
 *   For complex animations, include diagrams/sketches to visualize animation flow and object movements. This aids clarity and reduces errors.

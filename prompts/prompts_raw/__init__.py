@@ -267,9 +267,10 @@ Scene Technical Implementation:
 15. **Background:** Default background (Black) is sufficient. Do not create custom color background Rectangles.
 16. **Text Color:** Do not use BLACK color for any text. Use predefined colors (BLUE_C, BLUE_D, GREEN_C, GREEN_D, GREY_A, GREY_B, GREY_C, LIGHTER_GRAY, LIGHT_GRAY, GOLD_C, GOLD_D, PURPLE_C, TEAL_C, TEAL_D, WHITE).
 17. **Default Colors:** You MUST use the provided color definitions if you use colors in your code. ONLY USE THE COLORS PREVIOUSLY DEFINED.
-18. **Animation Timings and Narration Sync (CRITICAL)**: Your primary source for all animation run_time values MUST be the estimatedDuration from the Proto-TCM provided in the Input Context. Each self.play(...) call must have a run_time argument that exactly matches the corresponding duration in the Proto-TCM. The total duration of animations within a with self.voiceover(...) as tracker: block should approximate tracker.duration, achieved by correctly summing the individual run_time values from the Proto-TCM. Use Wait() for pauses.
-19. **Don't be lazy on code generation:** Generate full, complete code including all helper functions. Ensure that the output is comprehensive and the code is fully functional, incorporating all necessary helper methods and complete scene implementation details.
-20. **LaTeX Package Handling:** If the technical implementation plan specifies the need for additional LaTeX packages:
+18. **Code Display (CRITICAL):** If the scene requires displaying code (programming examples, algorithms, pseudocode, etc.), you MUST use Manim's `Code` class with proper syntax highlighting. Import it with `from manim import Code`. Specify the code content, programming language (e.g., language="python", language="java"), background color (e.g., background="window"), font size, and positioning. Example: `code_block = Code(code="def hello():\n    print('Hello')", language="python", background="window", font_size=24)`. Do NOT use `Tex`, `MathTex`, or `Text` objects to display code.
+19. **Animation Timings and Narration Sync (CRITICAL)**: Your primary source for all animation run_time values MUST be the estimatedDuration from the Proto-TCM provided in the Input Context. Each self.play(...) call must have a run_time argument that exactly matches the corresponding duration in the Proto-TCM. The total duration of animations within a with self.voiceover(...) as tracker: block should approximate tracker.duration, achieved by correctly summing the individual run_time values from the Proto-TCM. Use Wait() for pauses.
+20. **Don't be lazy on code generation:** Generate full, complete code including all helper functions. Ensure that the output is comprehensive and the code is fully functional, incorporating all necessary helper methods and complete scene implementation details.
+21. **LaTeX Package Handling:** If the technical implementation plan specifies the need for additional LaTeX packages:
     *   Create a `TexTemplate` object.
     *   Use `myTemplate = TexTemplate()`
     *   Use `myTemplate.add_to_preamble(r"\\usepackage{{package_name}}")` to add the required package.
@@ -338,6 +339,19 @@ class Scene{scene_number}_Helper:  # Example: class Scene1_Helper:
         else:
             formula = MathTex(formula_str, color=color)
         return formula
+
+    def create_code_block(self, code_str, language="python", font_size=24):
+        # Example function to create a Code block with syntax highlighting.
+        # Use this for displaying programming code, algorithms, or pseudocode.
+        code_block = Code(
+            code=code_str,
+            language=language,
+            background="window",
+            font_size=font_size,
+            insert_line_no=True,
+            style="monokai"
+        )
+        return code_block
 
     # ... (add more helper functions as needed for object creation and scene logic)
 
@@ -1008,6 +1022,176 @@ digraph Scene {
 }
 ```"""
 
+_prompt_manim_config = """# Manim Configuration System
+
+## Overview
+The global config object is an instance of ManimConfig class and acts as a single source of truth for all customizable behavior in Manim. It digests configuration from multiple sources in ascending order of precedence:
+1. Configuration files (.cfg)
+2. Command line arguments
+3. Programmatic changes
+
+## Accessing Config Options
+
+### Two Equivalent Syntaxes
+```python
+from manim import config
+
+# Attribute syntax (preferred)
+config.background_color = WHITE
+config.frame_height = 10.0
+
+# Dict syntax (backwards compatibility)
+config["background_color"] = WHITE
+config["frame_height"] = 10.0
+```
+
+## Key Configuration Properties
+
+### Frame and Resolution
+- `frame_width` - Frame width in logical units
+- `frame_height` - Frame height in logical units
+- `frame_x_radius` - Half the frame width
+- `frame_y_radius` - Half the frame height
+- `pixel_width` - Frame width in pixels
+- `pixel_height` - Frame height in pixels
+- `aspect_ratio` - Width/height ratio in pixels
+- `frame_size` - Tuple (pixel_width, pixel_height)
+
+### Coordinates
+- `top` - Coordinate at center top of frame
+- `bottom` - Coordinate at center bottom of frame
+- `left_side` - Coordinate at middle left of frame
+- `right_side` - Coordinate at middle right of frame
+
+### Visual Settings
+- `background_color` - Background color of scene
+- `background_opacity` - Float between 0.0 (transparent) and 1.0 (opaque)
+- `transparent` - Whether background opacity is 0.0
+
+### Output Settings
+- `quality` - Video quality (e.g., "1080p60", "480p15")
+- `frame_rate` - Frame rate in frames per second
+- `format` - File format: "png", "gif", "mp4", "webm", or "mov"
+- `movie_file_extension` - Either .mp4, .webm, or .mov
+- `output_file` - Output file name
+
+### Rendering Control
+- `preview` - Whether to play rendered movie
+- `write_to_movie` - Whether to render scene to movie file
+- `save_last_frame` - Whether to save last frame as image
+- `save_pngs` - Whether to save all frames as images
+- `save_as_gif` - Whether to save as .gif format
+- `write_all` - Whether to render all scenes in input file
+
+### Directory Paths
+- `media_dir` - Main output directory
+- `video_dir` - Directory for videos
+- `images_dir` - Directory for images
+- `tex_dir` - Directory for tex files
+- `text_dir` - Directory for text files
+- `log_dir` - Directory for logs
+- `assets_dir` - Directory to locate video assets
+- `partial_movie_dir` - Directory for partial movie files
+- `sections_dir` - Directory for section videos
+
+Use `config.get_dir(key, **kwargs)` to resolve directory paths that may contain placeholders.
+
+### Animation Control
+- `from_animation_number` - Start rendering at this animation number
+- `upto_animation_number` - Stop rendering at this animation number (use -1 to render all)
+
+### Caching
+- `disable_caching` - Whether to disable scene caching
+- `flush_cache` - Whether to delete cached partial movie files
+- `max_files_cached` - Maximum cached files (use -1 for infinity)
+
+### LaTeX/Text
+- `tex_template` - Template for rendering Tex
+- `tex_template_file` - File to read Tex template from
+- `no_latex_cleanup` - Prevents deletion of .aux, .dvi, .log files
+
+### Renderer Settings
+- `renderer` - Currently active renderer (RendererType enum)
+- `enable_gui` - Enable GUI interaction
+- `enable_wireframe` - Enable wireframe debugging in OpenGL
+- `force_window` - Force window with OpenGL renderer
+- `window_size` - Size of OpenGL window
+- `window_position` - Position of preview window (e.g., "UL", "DR", "960,540")
+- `window_monitor` - Monitor for rendering
+- `fullscreen` - Expand window to maximum size
+
+### Logging and Debug
+- `verbosity` - Logger level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+- `log_to_file` - Whether to save logs to file
+- `progress_bar` - Whether to show progress bars
+- `dry_run` - Whether dry run is enabled
+
+### FFmpeg
+- `ffmpeg_executable` - Custom path to ffmpeg
+- `ffmpeg_loglevel` - FFmpeg verbosity level
+
+### Miscellaneous
+- `input_file` - Input file name
+- `scene_names` - List of scenes to play from file
+- `custom_folders` - Whether to use custom folder output
+- `zero_pad` - PNG zero padding (0-9)
+- `plugins` - List of plugins to enable
+- `notify_outdated_version` - Whether to notify of updates
+
+## Temporary Configuration Changes
+
+Use `tempconfig()` context manager to temporarily modify config:
+
+```python
+from manim import config, tempconfig
+
+print(config.frame_height)  # 8.0
+
+with tempconfig({"frame_height": 100.0}):
+    print(config.frame_height)  # 100.0
+    # Modified config used here
+
+print(config.frame_height)  # 8.0 (restored)
+```
+
+## Internal Consistency
+
+Config options maintain internal consistency. For example:
+```python
+config.frame_height  # 8.0
+config.frame_y_radius = 5.0
+config.frame_height  # 10.0 (automatically updated)
+```
+
+## Configuration Methods
+
+### Copying Config
+```python
+new_config = config.copy()  # Deep copy with no shared references
+```
+
+### Updating Config
+```python
+config.update(other_config)  # Update from another ManimConfig or dict
+```
+
+### Processing Config Files
+```python
+config.digest_file("path/to/manim.cfg")  # Process single .cfg file
+config.digest_parser(parser)  # Process ConfigParser object
+config.digest_args(args)  # Process CLI arguments
+```
+
+## Best Practices
+
+1. Use attribute syntax over dict syntax for clarity
+2. Use `tempconfig()` for temporary changes to avoid side effects
+3. Set config options at the beginning of your script before scene definitions
+4. Use `config.get_dir()` to resolve directory paths with placeholders
+5. Remember precedence: config files < CLI args < programmatic changes
+6. Config changes within scene scripts override all other sources
+"""
+
 _prompt_rag_query_generation_code = """You are an expert in generating search queries specifically for **Manim (Community Edition) documentation** (both core Manim and its plugins). Your task is to transform a complete implementation plan for a Manim video scene into effective queries that will retrieve relevant information from Manim documentation. The implementation plan describes the scene's vision, storyboard, technical implementation, and animation/narration strategy.
 
 Here is the complete scene implementation plan:
@@ -1206,6 +1390,7 @@ The following manim plugins are relevant to the scene:
 *   Ensure animations create a clear and logical visual flow, **optimized for learning and concept understanding.**
 *   Use animation pacing and transition buffers to visually separate ideas and **enhance pedagogical clarity.**
 *   Maintain spatial coherence for predictable and understandable animations, strictly adhering to spatial constraints.
+*   **Code Display:** If the scene includes code examples, ensure they are displayed using Manim's `Code` class with proper syntax highlighting, not as plain text. Plan animations that highlight specific lines or sections of code as they are explained in the narration.
 
 **Diagrams/Sketches (Optional but Highly Recommended for Complex Scenes):**
 *   For complex animations, include diagrams/sketches to visualize animation flow and object movements. This aids clarity and reduces errors.
@@ -1540,6 +1725,7 @@ The following manim plugins are relevant to the scene:
 *   Creating *pedagogically sound and spatially correct Manim code*.
 *   Detailed technical descriptions, referencing Manim documentation.
 *   Strict adherence to spatial constraints and relative positioning.
+*   **Code Display Requirement:** If the scene requires displaying code (programming examples, algorithms, pseudocode, etc.), use Manim's `Code` class with proper syntax highlighting. Specify the programming language, font size, line numbers (if needed), and positioning. Do NOT use `Tex` or `Text` for code display.
 
 You MUST generate the technical implementation plan for the scene in the following format (from ```xml to </SCENE_TECHNICAL_IMPLEMENTATION_PLAN>```):
 
@@ -1628,6 +1814,7 @@ The following manim plugins are relevant to the scene:
 *   Provide detailed visual descriptions in Manim terms to guide human implementation.
 *   Prioritize explanation and visualization of the theorem. Do not include any promotional elements or quiz sessions.
 *   Minimize text usage - rely primarily on visual elements, mathematical notation, and animations to convey concepts. Use text sparingly and only when necessary for clarity.
+*   **Code Display Requirement:** If the scene includes displaying code (programming examples, algorithms, pseudocode, etc.), the code MUST be presented in a proper code block format using Manim's `Code` class with appropriate syntax highlighting and formatting. Do NOT display code as plain text using `Tex` or `Text` objects.
 
 **Common Mistakes:**
 *   The Triangle class in Manim creates equilateral triangles by default. To create a right-angled triangle, use the Polygon class instead.

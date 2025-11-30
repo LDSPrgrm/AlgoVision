@@ -41,6 +41,7 @@ The following manim plugins are relevant to the scene:
 *   Creating *pedagogically sound and spatially correct Manim code*.
 *   Detailed technical descriptions, referencing Manim documentation.
 *   Strict adherence to spatial constraints and relative positioning.
+*   **Code Display Requirement:** If the scene requires displaying code (programming examples, algorithms, pseudocode, etc.), use Manim's `Code` class with proper syntax highlighting. Specify the programming language, font size, line numbers (if needed), and positioning. Do NOT use `Tex` or `Text` for code display.
 
 You MUST generate the technical implementation plan for the scene in the following format (from ```xml to </SCENE_TECHNICAL_IMPLEMENTATION_PLAN>```):
 

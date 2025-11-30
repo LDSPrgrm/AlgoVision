@@ -67,6 +67,7 @@ class VideoRenderer:
                     raise Exception(result.stderr)
 
                 if use_visual_fix_code and visual_self_reflection_func and banned_reasonings:
+                    print(f"Scene {curr_scene} ---> Analyzing rendered video for improvements...")
                     # Get the rendered video path
                     video_path = os.path.join(
                         media_dir,
@@ -82,7 +83,8 @@ class VideoRenderer:
                         media_input = self.create_snapshot_scene(
                             topic, curr_scene, curr_version, return_type="path"
                         )
-                        
+                    
+                    print(f"Scene {curr_scene} ---> Generating visual improvements...")
                     new_code, log = visual_self_reflection_func(
                         code,
                         media_input,
@@ -97,13 +99,15 @@ class VideoRenderer:
 
                     # Check for termination markers
                     if "<LGTM>" in new_code or any(word in new_code for word in banned_reasonings):
+                        print(f"Scene {curr_scene} ✅ Visual quality approved.")
                         break
 
+                    print(f"Scene {curr_scene} ---> Applying visual improvements...")
                     code = new_code
                     curr_version += 1
                     with open(os.path.join(code_dir, f"{file_prefix}_scene{curr_scene}_v{curr_version}.py"), "w", encoding='utf-8') as f:
                         f.write(code)
-                    print(f"Code saved.")
+                    print(f"Scene {curr_scene} ---> Re-rendering with improved code...")
                     retries = 0
                     continue
 

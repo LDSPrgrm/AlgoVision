@@ -10,6 +10,15 @@ if sys.platform == 'win32':
 
 from nicegui import app, ui, events
 import asyncio
+import warnings
+import logging
+
+# Suppress Windows asyncio ConnectionResetError warnings (harmless cleanup warnings)
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # Suppress specific asyncio warnings
+    warnings.filterwarnings('ignore', category=ResourceWarning)
+    logging.getLogger('asyncio').setLevel(logging.ERROR)
 import textwrap
 import json
 import os
@@ -923,18 +932,21 @@ class VideoGenerator:
                     })
                     break
                 print(f"Scene {curr_scene} ---> Fixing code issues (attempt {curr_version + 1}/{max_retries})...")
+                print(f"Scene {curr_scene} ---> Analyzing error and generating fix...")
                 code, log = self.code_generator.fix_code_errors(
                     implementation_plan=scene_implementation, proto_tcm=proto_tcm,
                     code=code, error=error_message, scene_trace_id=scene_trace_id,
                     topic=topic, scene_number=curr_scene, session_id=session_id,
                     rag_queries_cache=rag_queries_cache,
                 )
+                print(f"Scene {curr_scene} ---> Fixed code generated, saving...")
                 log_path = os.path.join(code_dir, f"{file_prefix}_scene{curr_scene}_v{curr_version}_fix_log.txt")
                 code_path = os.path.join(code_dir, f"{file_prefix}_scene{curr_scene}_v{curr_version}.py")
                 with open(log_path, "w", encoding="utf-8") as f:
                     f.write(log)
                 with open(code_path, "w", encoding="utf-8") as f:
                     f.write(code)
+                print(f"Scene {curr_scene} ---> Re-rendering with fixed code...")
 
 
 # --- Initialize Video Generator ---
@@ -4525,9 +4537,17 @@ Make questions relevant to the video content and educational."""
                         
                         # Description Section
                         with ui.column().classes("w-full").style("gap: 8px;"):
-                            with ui.row().classes("items-center gap-2"):
-                                ui.icon("description", size="sm").classes("text-primary")
-                                ui.label("Video Description").classes("text-sm font-semibold text-gray-900 dark:text-white")
+                            with ui.row().classes("items-center gap-2 justify-between w-full"):
+                                with ui.row().classes("items-center gap-2"):
+                                    ui.icon("description", size="sm").classes("text-primary")
+                                    ui.label("Video Description").classes("text-sm font-semibold text-gray-900 dark:text-white")
+                                auto_gen_button = (
+                                    ui.button("Auto-Generate", icon="auto_awesome")
+                                    .props("flat dense no-caps")
+                                    .classes("text-primary")
+                                    .style("font-size: 0.875rem;")
+                                    .tooltip("Generate description from project name using AI")
+                                )
                             desc_input = (
                                 ui.textarea(
                                     placeholder="""Tips for better videos:
@@ -4587,6 +4607,104 @@ Style: Use simple animations, friendly tone, and a relatable analogy (like guess
                                         "w-full h-64 bg-gray-900 dark:bg-black text-white font-mono rounded-lg"
                                     )
                                 )
+                
+                # Define the auto-generate description handler
+                async def handle_auto_generate_description():
+                    topic = topic_input.value
+                    if not topic or not topic.strip():
+                        ui.notify("Please enter a Project Name first.", color="warning")
+                        return
+                    
+                    # Disable button and show loading state
+                    auto_gen_button.disable()
+                    auto_gen_button.props("loading")
+                    ui.notify("Generating description...", color="info")
+                    
+                    try:
+                        # Run LLM call in executor to keep UI responsive
+                        import concurrent.futures
+                        
+                        def generate_description():
+                            # Use the planner model to generate description
+                            llm = LiteLLMWrapper(
+                                model_name=app_state["planner_model_name"],
+                                temperature=0.7,
+                                print_cost=False,
+                                verbose=False,
+                                use_langfuse=False
+                            )
+                            
+                            # Create prompt that produces clean output without asterisks or preambles
+                            prompt = f"""Generate a detailed video description for an educational video about "{topic}".
+
+IMPORTANT INSTRUCTIONS:
+- Start directly with the content, NO preambles like "Here is..." or "Of course!"
+- Use plain text formatting with line breaks, NOT markdown asterisks or bold
+- Use bullet points with • symbol, not asterisks
+- Be specific, include concrete examples
+- Make it educational and engaging
+
+REQUIRED FORMAT:
+
+Create a short video for [audience level] explaining [Topic].
+
+Target Audience: [Specify audience level and background]
+Key Concepts: [List 2-4 main concepts]
+
+Content:
+• [First key point with specific example]
+• [Second key point with visualization approach]
+• [Third key point showing step-by-step process]
+• [Fourth key point with comparison or application]
+• [Final point with complexity or summary]
+
+Style: [Describe the teaching approach and tone]
+
+Now generate the description for "{topic}" following this exact format."""
+
+                            messages = [{"type": "text", "content": prompt}]
+                            return llm(messages, metadata={})
+                        
+                        # Run in thread pool to avoid blocking UI
+                        loop = asyncio.get_event_loop()
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            generated_desc = await loop.run_in_executor(executor, generate_description)
+                        
+                        if generated_desc and not generated_desc.startswith("Error"):
+                            # Clean up any remaining asterisks or unwanted formatting
+                            generated_desc = generated_desc.strip()
+                            # Remove common preambles
+                            preambles = [
+                                "Of course! Here is",
+                                "Here is a detailed",
+                                "Here's a detailed",
+                                "Sure! Here is",
+                                "Certainly! Here is",
+                            ]
+                            for preamble in preambles:
+                                if generated_desc.startswith(preamble):
+                                    # Find the first newline after preamble and start from there
+                                    first_newline = generated_desc.find('\n')
+                                    if first_newline > 0:
+                                        generated_desc = generated_desc[first_newline:].strip()
+                                    break
+                            
+                            desc_input.value = generated_desc
+                            ui.notify("Description generated successfully!", color="positive")
+                        else:
+                            ui.notify("Failed to generate description. Please try again.", color="negative")
+                    
+                    except Exception as e:
+                        print(f"Error generating description: {e}")
+                        ui.notify(f"Error: {str(e)}", color="negative")
+                    
+                    finally:
+                        # Re-enable button
+                        auto_gen_button.enable()
+                        auto_gen_button.props(remove="loading")
+                
+                # Connect the auto-generate button handler
+                auto_gen_button.on_click(handle_auto_generate_description)
                 
                 # Define the generate handler now that UI elements exist
                 async def handle_generate():
