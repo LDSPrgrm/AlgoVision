@@ -66,6 +66,12 @@ Then start the application:
 python main.py
 ```
 
+Or simply:
+
+```bash
+command
+```
+
 The web interface will be available at `http://localhost:8080`
 
 ## 📖 Usage

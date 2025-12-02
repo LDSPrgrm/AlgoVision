@@ -291,7 +291,7 @@ def set_active_output_dir(self, new_output_dir):
     self.video_renderer.output_dir = new_output_dir
 
 
-def load_voices(file_path="voices.json"):
+def load_voices(file_path="src/tts/voices.json"):
     if not os.path.exists(file_path):
         return []
     try:
@@ -299,7 +299,7 @@ def load_voices(file_path="voices.json"):
             voices = json.load(f)
             return [v for v in voices if "id" in v and "name" in v]
     except Exception as e:
-        ui.notify(f"Error loading voices.json: {e}", type="negative")
+        ui.notify(f"Error loading src/tts/voices.json: {e}", type="negative")
         return []
 
 
@@ -3089,7 +3089,7 @@ async def main_page():
                         ui.icon("mic", size="sm").classes("text-primary")
                         ui.label("Voice Selection").classes("text-sm font-semibold text-primary dark:text-primary")
                     
-                    voices = load_voices("voices.json")
+                    voices = load_voices("src/tts/voices.json")
                     if voices:
                         voice_options = {v["id"]: v["name"] for v in voices}
                         first_voice_id = next(iter(voice_options))
@@ -4139,7 +4139,7 @@ Make questions relevant to the video content and educational."""
                                     
                                             # Load system prompt from file
                                             try:
-                                                with open("ai_tutor_system_prompt.txt", "r", encoding="utf-8") as f:
+                                                with open("prompts/ai_tutor_system_prompt.txt", "r", encoding="utf-8") as f:
                                                     system_prompt_template = f.read()
                                                 # Replace placeholders
                                                 system_prompt = system_prompt_template.format(
