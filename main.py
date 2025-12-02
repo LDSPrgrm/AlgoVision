@@ -153,6 +153,82 @@ def safe_read_file(path, clean=True):
         return f"Error reading file: {e}"
 
 
+def get_scene_implementation_context(output_dir, topic, scene_number):
+    """
+    Retrieves scene implementation details including code, visual plan, 
+    technical implementation, and animation narration for a specific scene.
+    
+    Returns a dictionary with all available implementation details.
+    """
+    project_path = get_project_path(output_dir, topic)
+    file_prefix = os.path.basename(project_path)
+    scene_dir = os.path.join(project_path, f"scene{scene_number}")
+    
+    context = {
+        "scene_number": scene_number,
+        "implementation_plan": None,
+        "code": None,
+        "visual_plan": None,
+        "technical_plan": None,
+        "animation_narration": None,
+    }
+    
+    # Load implementation plan
+    plan_path = os.path.join(scene_dir, f"{file_prefix}_scene{scene_number}_implementation_plan.txt")
+    if os.path.exists(plan_path):
+        context["implementation_plan"] = safe_read_file(plan_path, clean=False)
+        
+        # Extract specific sections from implementation plan
+        plan_content = context["implementation_plan"]
+        
+        # Extract visual storyboard
+        visual_match = re.search(
+            r'<SCENE_VISION_STORYBOARD_PLAN>(.*?)</SCENE_VISION_STORYBOARD_PLAN>',
+            plan_content, re.DOTALL
+        )
+        if visual_match:
+            context["visual_plan"] = visual_match.group(1).strip()
+        
+        # Extract technical implementation
+        tech_match = re.search(
+            r'<SCENE_TECHNICAL_IMPLEMENTATION_PLAN>(.*?)</SCENE_TECHNICAL_IMPLEMENTATION_PLAN>',
+            plan_content, re.DOTALL
+        )
+        if tech_match:
+            context["technical_plan"] = tech_match.group(1).strip()
+        
+        # Extract animation narration
+        anim_match = re.search(
+            r'<SCENE_ANIMATION_NARRATION_PLAN>(.*?)</SCENE_ANIMATION_NARRATION_PLAN>',
+            plan_content, re.DOTALL
+        )
+        if anim_match:
+            context["animation_narration"] = anim_match.group(1).strip()
+    
+    # Load generated code
+    code_dir = os.path.join(scene_dir, "code")
+    if os.path.exists(code_dir):
+        code_files = [f for f in os.listdir(code_dir) if f.endswith('.py')]
+        if code_files:
+            # Get the latest version
+            code_files.sort(reverse=True)
+            code_path = os.path.join(code_dir, code_files[0])
+            context["code"] = safe_read_file(code_path, clean=False)
+    
+    return context
+
+
+def extract_scene_number_from_concept_id(concept_id):
+    """
+    Extracts scene number from concept ID.
+    Example: "Bubble_Sort.scene_1.array_initialization" -> 1
+    """
+    match = re.search(r'scene_(\d+)', concept_id)
+    if match:
+        return int(match.group(1))
+    return None
+
+
 def check_status(self, theorem: dict):
     topic = theorem["theorem"]
     project_path = get_project_path(self.output_dir, topic)
@@ -324,8 +400,63 @@ def tcm_to_srt(
     return "\n".join(srt_lines)
 
 
+def tcm_to_vtt(
+    tcm: list, max_line_length=40, max_lines=2, max_block_duration=4.0
+) -> str:
+    """
+    Convert TCM events directly to WebVTT format.
+    More efficient than converting SRT → VTT.
+    """
+
+    def sec_to_vtt_time(sec):
+        h = int(sec // 3600)
+        m = int((sec % 3600) // 60)
+        s = int(sec % 60)
+        ms = int(round((sec - int(sec)) * 1000))
+        return f"{h:02}:{m:02}:{s:02}.{ms:003}"
+
+    vtt_lines = ['WEBVTT', '']  # Header with blank line
+    idx = 1
+    for event in tcm:
+        narration = event.get("narrationText", "").strip()
+        if not narration or narration == "...":
+            continue
+        start = float(event["startTime"])
+        end = float(event["endTime"])
+        duration = end - start
+        chunks = split_narration_to_chunks(
+            narration, max_chars=max_line_length, max_lines=max_lines
+        )
+        n_chunks = len(chunks)
+        if n_chunks == 0:
+            continue
+        chunk_duration = min(duration / n_chunks, max_block_duration)
+        chunk_start = start
+        for chunk in chunks:
+            chunk_end = min(chunk_start + chunk_duration, end)
+            vtt_lines.append(f"{idx}")
+            vtt_lines.append(
+                f"{sec_to_vtt_time(chunk_start)} --> {sec_to_vtt_time(chunk_end)}"
+            )
+            wrapped = textwrap.wrap(chunk, width=max_line_length)
+            if len(wrapped) > max_lines:
+                wrapped = wrapped[: max_lines - 1] + [
+                    " ".join(wrapped[max_lines - 1 :])
+                ]
+            vtt_lines.extend(wrapped)
+            vtt_lines.append("")
+            idx += 1
+            chunk_start = chunk_end
+            if chunk_start >= end:
+                break
+    return "\n".join(vtt_lines)
+
+
 def srt_to_vtt(srt_content: str) -> str:
-    """Convert SRT subtitle format to WebVTT format."""
+    """
+    Convert SRT subtitle format to WebVTT format.
+    Note: For better performance, use tcm_to_vtt() directly instead of tcm_to_srt() → srt_to_vtt().
+    """
     lines = srt_content.strip().split('\n')
     vtt_lines = ['WEBVTT\n']
     
@@ -336,6 +467,157 @@ def srt_to_vtt(srt_content: str) -> str:
         vtt_lines.append(line)
     
     return '\n'.join(vtt_lines)
+
+
+def regenerate_subtitles_only(topic: str, output_dir: str = "output"):
+    """
+    Regenerate ONLY subtitle files (SRT/VTT) without re-combining videos.
+    Much faster than combine_videos() when video already exists.
+    """
+    project_path = get_project_path(output_dir, topic)
+    project_name = os.path.basename(os.path.dirname(project_path))
+    inner_folder_name = os.path.basename(project_path)
+
+    output_video_path = os.path.join(project_path, f"{inner_folder_name}_combined.mp4")
+    output_tcm_path = os.path.join(project_path, f"{inner_folder_name}_combined_tcm.json")
+    output_srt_path = os.path.join(project_path, f"{inner_folder_name}_combined.srt")
+    output_vtt_path = os.path.join(project_path, f"{inner_folder_name}_combined.vtt")
+
+    # Check if combined video exists
+    if not os.path.exists(output_video_path):
+        print(f"[{topic}] ERROR: Combined video not found. Run full combine_videos() first.")
+        return "no_video"
+
+    print(f"[{topic}] ==> Regenerating subtitles from existing TCM...")
+    
+    # Build TCM from scene proto_tcm files
+    final_tcm = []
+    global_time_offset = 0.0
+
+    try:
+        scene_dirs = sorted(
+            glob.glob(os.path.join(project_path, "scene*")),
+            key=lambda x: int(re.search(r"scene(\d+)", x).group(1)),
+        )
+    except (TypeError, ValueError):
+        print(f"  - ERROR: Could not sort scene directories in '{project_path}'.")
+        return "error"
+
+    for scene_dir in scene_dirs:
+        scene_num = int(re.search(r"scene(\d+)", os.path.basename(scene_dir)).group(1))
+        video_path = find_latest_video_for_scene(project_path, scene_num)
+        proto_tcm_path = os.path.join(scene_dir, "proto_tcm.json")
+        succ_rendered_path = os.path.join(scene_dir, "succ_rendered.txt")
+
+        if not video_path or not os.path.exists(succ_rendered_path):
+            continue
+
+        if not os.path.exists(proto_tcm_path):
+            continue
+
+        try:
+            # Get video duration without loading the entire video
+            with VideoFileClip(video_path) as clip:
+                actual_duration = clip.duration
+
+            with open(proto_tcm_path, "r", encoding="utf-8") as f:
+                proto_tcm = json.load(f)
+
+            # Load actual audio durations from voiceover cache
+            actual_audio_durations = {}
+            possible_cache_dirs = [
+                os.path.join(scene_dir, "code", "media", "voiceovers"),
+                os.path.join(project_path, "media", "voiceovers"),
+                os.path.join(os.path.dirname(video_path), "voiceovers"),
+            ]
+            
+            for voiceover_cache_dir in possible_cache_dirs:
+                if os.path.exists(voiceover_cache_dir):
+                    # Check for cache.json file (Manim voiceover format)
+                    cache_file = os.path.join(voiceover_cache_dir, "cache.json")
+                    if os.path.exists(cache_file):
+                        try:
+                            with open(cache_file, "r", encoding="utf-8") as f:
+                                cache_data = json.load(f)
+                                # cache_data is an array of audio entries
+                                for entry in cache_data:
+                                    if "input_text" in entry and "original_audio" in entry:
+                                        audio_file = os.path.join(voiceover_cache_dir, entry["original_audio"])
+                                        if os.path.exists(audio_file):
+                                            from moviepy import AudioFileClip
+                                            with AudioFileClip(audio_file) as audio:
+                                                text = entry["input_text"]
+                                                actual_audio_durations[text] = audio.duration
+                        except Exception as e:
+                            print(f"  - Warning: Could not load cache.json: {e}")
+                    
+                    if actual_audio_durations:
+                        print(f"  - Loaded {len(actual_audio_durations)} actual audio durations from cache")
+                        break
+
+            # CRITICAL FIX: Only count estimated duration for events WITH narration
+            # Empty narration events don't contribute to video duration
+            total_estimated_duration = sum(
+                e.get("estimatedDuration", 1.0) 
+                for e in proto_tcm 
+                if e.get("narrationText", "").strip() and e.get("narrationText", "").strip() != "..."
+            )
+            scaling_factor = actual_duration / total_estimated_duration if total_estimated_duration > 0 else 1
+
+            # Build TCM with proper timing
+            scene_time_offset = 0
+            for event in proto_tcm:
+                narration_text = event.get("narrationText", "")
+                
+                # CRITICAL FIX: Events with no narration don't generate audio, so duration = 0
+                # This prevents subtitle drift caused by counting time for silent events
+                if narration_text and narration_text.strip() and narration_text != "...":
+                    # Has narration - use actual audio duration
+                    if narration_text in actual_audio_durations:
+                        actual_event_duration = actual_audio_durations[narration_text]
+                    else:
+                        # Fallback to scaled estimate if audio not found
+                        actual_event_duration = event.get("estimatedDuration", 1.0) * scaling_factor
+                        for cached_text, cached_duration in actual_audio_durations.items():
+                            if cached_text.strip() == narration_text.strip():
+                                actual_event_duration = cached_duration
+                                break
+                else:
+                    # No narration = no audio = 0 duration (visual-only event)
+                    actual_event_duration = 0.0
+                
+                event["startTime"] = f"{global_time_offset + scene_time_offset:.3f}"
+                event["endTime"] = f"{global_time_offset + scene_time_offset + actual_event_duration:.3f}"
+                event["conceptId"] = f"{project_name}.scene_{scene_num}.{event.get('conceptName', 'event').replace(' ', '_')}"
+                event["_sync_fix_applied"] = True
+                if "estimatedDuration" in event:
+                    del event["estimatedDuration"]
+                final_tcm.append(event)
+                scene_time_offset += actual_event_duration
+
+            global_time_offset += actual_duration
+        except Exception as e:
+            print(f"  - ERROR processing Scene {scene_num}: {e}")
+
+    if final_tcm:
+        # Save updated TCM
+        with open(output_tcm_path, "w", encoding="utf-8") as f:
+            json.dump(final_tcm, f, indent=2, ensure_ascii=False)
+
+        # Generate subtitles
+        srt_content = tcm_to_srt(final_tcm)
+        with open(output_srt_path, "w", encoding="utf-8") as f:
+            f.write(srt_content)
+        
+        vtt_content = tcm_to_vtt(final_tcm)
+        with open(output_vtt_path, "w", encoding="utf-8") as f:
+            f.write(vtt_content)
+
+        print(f"[{topic}] ==> Subtitles regenerated successfully (video unchanged).")
+        return "success"
+    else:
+        print(f"[{topic}] <== No TCM data found.")
+        return "no_data"
 
 
 def combine_videos(topic: str, output_dir: str = "output"):
@@ -353,14 +635,30 @@ def combine_videos(topic: str, output_dir: str = "output"):
     )
     output_srt_path = os.path.join(project_path, f"{inner_folder_name}_combined.srt")
     output_vtt_path = os.path.join(project_path, f"{inner_folder_name}_combined.vtt")
+    
+    # Check if we need to regenerate due to subtitle sync improvements
+    needs_regeneration = False
+    if os.path.exists(output_tcm_path):
+        # Check if TCM was created with actual audio durations (has a marker)
+        try:
+            with open(output_tcm_path, "r", encoding="utf-8") as f:
+                tcm_data = json.load(f)
+                # Check if this TCM has the sync fix marker
+                has_sync_fix = any(event.get("_sync_fix_applied", False) for event in tcm_data)
+                if not has_sync_fix:
+                    print(f"[{topic}] Detected old subtitle timing - will regenerate with improved sync")
+                    needs_regeneration = True
+        except:
+            needs_regeneration = True
 
     if (
         os.path.exists(output_video_path)
         and os.path.exists(output_tcm_path)
         and os.path.exists(output_srt_path)
         and os.path.exists(output_vtt_path)
+        and not needs_regeneration
     ):
-        msg = f"[{topic}] Combined assets already exist. Skipping."
+        msg = f"[{topic}] Combined assets already exist with improved sync. Skipping."
         print(msg)
         return "already_exists"
 
@@ -401,13 +699,57 @@ def combine_videos(topic: str, output_dir: str = "output"):
         try:
             with VideoFileClip(video_path) as clip:
                 actual_duration = clip.duration
+                # Extract audio track to get actual audio timing
+                audio_clip = clip.audio
             video_clips_paths.append(video_path)
 
             with open(proto_tcm_path, "r", encoding="utf-8") as f:
                 proto_tcm = json.load(f)
 
+            # SUBTITLE SYNC FIX: Load actual audio durations from voiceover cache
+            # This fixes the issue where subtitles drift ahead of audio over time.
+            # Instead of using scaled estimated durations, we use the real TTS-generated
+            # audio file durations for accurate subtitle timing.
+            actual_audio_durations = {}
+            # Check multiple possible voiceover cache locations
+            possible_cache_dirs = [
+                os.path.join(scene_dir, "code", "media", "voiceovers"),
+                os.path.join(project_path, "media", "voiceovers"),
+                os.path.join(os.path.dirname(video_path), "voiceovers"),
+            ]
+            
+            for voiceover_cache_dir in possible_cache_dirs:
+                if os.path.exists(voiceover_cache_dir):
+                    print(f"  - Found voiceover cache at: {voiceover_cache_dir}")
+                    # Check for cache.json file (Manim voiceover format)
+                    cache_file = os.path.join(voiceover_cache_dir, "cache.json")
+                    if os.path.exists(cache_file):
+                        try:
+                            with open(cache_file, "r", encoding="utf-8") as f:
+                                cache_data = json.load(f)
+                                # cache_data is an array of audio entries
+                                for entry in cache_data:
+                                    if "input_text" in entry and "original_audio" in entry:
+                                        audio_file = os.path.join(voiceover_cache_dir, entry["original_audio"])
+                                        if os.path.exists(audio_file):
+                                            from moviepy import AudioFileClip
+                                            with AudioFileClip(audio_file) as audio:
+                                                text = entry["input_text"]
+                                                actual_audio_durations[text] = audio.duration
+                                                print(f"  - Loaded audio duration {audio.duration:.3f}s for text: {text[:50]}...")
+                        except Exception as e:
+                            print(f"  - Warning: Could not load cache.json: {e}")
+                    
+                    if actual_audio_durations:
+                        print(f"  - Successfully loaded {len(actual_audio_durations)} actual audio durations")
+                        break
+
+            # CRITICAL FIX: Only count estimated duration for events WITH narration
+            # Empty narration events don't contribute to video duration
             total_estimated_duration = sum(
-                e.get("estimatedDuration", 1.0) for e in proto_tcm
+                e.get("estimatedDuration", 1.0) 
+                for e in proto_tcm 
+                if e.get("narrationText", "").strip() and e.get("narrationText", "").strip() != "..."
             )
             scaling_factor = (
                 actual_duration / total_estimated_duration
@@ -415,20 +757,70 @@ def combine_videos(topic: str, output_dir: str = "output"):
                 else 1
             )
 
-            scene_time_offset = 0
-            for event in proto_tcm:
-                scaled_duration = event.get("estimatedDuration", 1.0) * scaling_factor
-                event["startTime"] = f"{global_time_offset + scene_time_offset:.3f}"
-                event["endTime"] = (
-                    f"{global_time_offset + scene_time_offset + scaled_duration:.3f}"
-                )
-                event["conceptId"] = (
-                    f"{project_name}.scene_{scene_num}.{event.get('conceptName', 'event').replace(' ', '_')}"
-                )
-                if "estimatedDuration" in event:
-                    del event["estimatedDuration"]
-                final_tcm.append(event)
-                scene_time_offset += scaled_duration
+            # If we have actual audio durations, use them; otherwise use proportional scaling
+            if actual_audio_durations:
+                # Use actual audio durations for better synchronization
+                scene_time_offset = 0
+                for event in proto_tcm:
+                    narration_text = event.get("narrationText", "")
+                    
+                    # CRITICAL FIX: Events with no narration don't generate audio, so duration = 0
+                    # This prevents subtitle drift caused by counting time for silent events
+                    if narration_text and narration_text.strip() and narration_text != "...":
+                        # Has narration - use actual audio duration
+                        if narration_text in actual_audio_durations:
+                            actual_event_duration = actual_audio_durations[narration_text]
+                        else:
+                            # If not found, try to find a close match (in case of minor text differences)
+                            actual_event_duration = event.get("estimatedDuration", 1.0) * scaling_factor
+                            for cached_text, cached_duration in actual_audio_durations.items():
+                                if cached_text.strip() == narration_text.strip():
+                                    actual_event_duration = cached_duration
+                                    break
+                    else:
+                        # No narration = no audio = 0 duration (visual-only event)
+                        actual_event_duration = 0.0
+                    
+                    event["startTime"] = f"{global_time_offset + scene_time_offset:.3f}"
+                    event["endTime"] = (
+                        f"{global_time_offset + scene_time_offset + actual_event_duration:.3f}"
+                    )
+                    event["conceptId"] = (
+                        f"{project_name}.scene_{scene_num}.{event.get('conceptName', 'event').replace(' ', '_')}"
+                    )
+                    # Mark that this event was created with the sync fix
+                    event["_sync_fix_applied"] = True
+                    if "estimatedDuration" in event:
+                        del event["estimatedDuration"]
+                    final_tcm.append(event)
+                    scene_time_offset += actual_event_duration
+            else:
+                # Fall back to proportional scaling if no actual durations available
+                print(f"  - Warning: No actual audio durations found, using proportional scaling")
+                scene_time_offset = 0
+                for event in proto_tcm:
+                    narration_text = event.get("narrationText", "")
+                    
+                    # CRITICAL FIX: Even in fallback mode, skip duration for empty narration
+                    if narration_text and narration_text.strip() and narration_text != "...":
+                        scaled_duration = event.get("estimatedDuration", 1.0) * scaling_factor
+                    else:
+                        # No narration = no audio = 0 duration
+                        scaled_duration = 0.0
+                    
+                    event["startTime"] = f"{global_time_offset + scene_time_offset:.3f}"
+                    event["endTime"] = (
+                        f"{global_time_offset + scene_time_offset + scaled_duration:.3f}"
+                    )
+                    event["conceptId"] = (
+                        f"{project_name}.scene_{scene_num}.{event.get('conceptName', 'event').replace(' ', '_')}"
+                    )
+                    # Mark that this event was NOT created with actual audio durations
+                    event["_sync_fix_applied"] = False
+                    if "estimatedDuration" in event:
+                        del event["estimatedDuration"]
+                    final_tcm.append(event)
+                    scene_time_offset += scaled_duration
 
             print(
                 f"  - Processed Scene {scene_num} (Duration: {actual_duration:.2f}s), {len(proto_tcm)} TCM entries."
@@ -447,12 +839,14 @@ def combine_videos(topic: str, output_dir: str = "output"):
         with open(output_tcm_path, "w", encoding="utf-8") as f:
             json.dump(final_tcm, f, indent=2, ensure_ascii=False)
 
+        # Generate subtitles in both SRT and VTT formats
+        # Using direct conversion for better performance
         srt_content = tcm_to_srt(final_tcm)
         with open(output_srt_path, "w", encoding="utf-8") as f:
             f.write(srt_content)
         
-        # Also create VTT version for better browser compatibility
-        vtt_content = srt_to_vtt(srt_content)
+        # Generate VTT directly from TCM (more efficient than SRT → VTT conversion)
+        vtt_content = tcm_to_vtt(final_tcm)
         with open(output_vtt_path, "w", encoding="utf-8") as f:
             f.write(vtt_content)
 
@@ -3778,6 +4172,41 @@ Make questions relevant to the video content and educational."""
                                                     context_parts.append(f"\nVisual (what's on screen):\n{visual}")
                                                 if concept_id:
                                                     context_parts.append(f"\nConcept ID: {concept_id}")
+                                                
+                                                # Extract scene number and load implementation context
+                                                scene_num = extract_scene_number_from_concept_id(concept_id)
+                                                if scene_num:
+                                                    try:
+                                                        scene_context = get_scene_implementation_context(
+                                                            "output", topic, scene_num
+                                                        )
+                                                        
+                                                        context_parts.append(f"\n--- SCENE {scene_num} IMPLEMENTATION DETAILS ---")
+                                                        
+                                                        # Add visual storyboard plan
+                                                        if scene_context.get("visual_plan"):
+                                                            context_parts.append(f"\nVisual Storyboard Plan:")
+                                                            context_parts.append(scene_context["visual_plan"][:800] + "..." if len(scene_context["visual_plan"]) > 800 else scene_context["visual_plan"])
+                                                        
+                                                        # Add technical implementation plan
+                                                        if scene_context.get("technical_plan"):
+                                                            context_parts.append(f"\nTechnical Implementation:")
+                                                            context_parts.append(scene_context["technical_plan"][:800] + "..." if len(scene_context["technical_plan"]) > 800 else scene_context["technical_plan"])
+                                                        
+                                                        # Add animation narration plan
+                                                        if scene_context.get("animation_narration"):
+                                                            context_parts.append(f"\nAnimation & Narration Plan:")
+                                                            context_parts.append(scene_context["animation_narration"][:800] + "..." if len(scene_context["animation_narration"]) > 800 else scene_context["animation_narration"])
+                                                        
+                                                        # Add code implementation (truncated for context window)
+                                                        if scene_context.get("code"):
+                                                            context_parts.append(f"\nMaim Code Implementation:")
+                                                            code_preview = scene_context["code"][:1500] + "..." if len(scene_context["code"]) > 1500 else scene_context["code"]
+                                                            context_parts.append(f"```python\n{code_preview}\n```")
+                                                    
+                                                    except Exception as e:
+                                                        # Silently fail if scene context can't be loaded
+                                                        print(f"Could not load scene context: {e}")
                                             else:
                                                 context_parts.append("(Video is currently playing - student needs to pause to get specific context)")
                                         
@@ -4493,6 +4922,186 @@ Make questions relevant to the video content and educational."""
                     with ui.row().classes("w-full items-center gap-2 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg"):
                         ui.icon("check_circle", size="md").classes("text-green-600")
                         ui.label("All projects are complete! 🎉").classes("text-green-700 dark:text-green-300 font-medium")
+            
+            # Regenerate Subtitles Section
+            with ui.card().classes("w-full mb-4").style("padding: 24px;"):
+                with ui.row().classes("w-full items-center gap-3 mb-4"):
+                    ui.icon("closed_caption", size="lg").classes("text-primary")
+                    with ui.column().classes("gap-1"):
+                        ui.label("Fix Subtitle Synchronization").classes("text-xl font-bold text-gray-900 dark:text-white")
+                        ui.label("Regenerate subtitles with improved audio sync for completed projects").classes("text-sm text-gray-600 dark:text-gray-400")
+                
+                # Info box explaining the feature
+                with ui.expansion("ℹ️ What does this do?", icon="help_outline").props("dense").classes("w-full mb-3"):
+                    with ui.column().classes("gap-2 p-2"):
+                        ui.label("This tool fixes subtitle synchronization issues where subtitles drift ahead of or behind the audio over time.").classes("text-sm text-gray-700 dark:text-gray-300")
+                        ui.separator()
+                        ui.label("How it works:").classes("text-sm font-semibold text-gray-800 dark:text-gray-200")
+                        ui.label("• Loads actual audio durations from voiceover cache files").classes("text-sm text-gray-600 dark:text-gray-400")
+                        ui.label("• Recalculates subtitle timing using real audio lengths").classes("text-sm text-gray-600 dark:text-gray-400")
+                        ui.label("• Generates new .srt and .vtt subtitle files").classes("text-sm text-gray-600 dark:text-gray-400")
+                        ui.separator()
+                        ui.label("Note: This only regenerates subtitles - the video itself is not re-rendered.").classes("text-xs text-gray-500 dark:text-gray-400 italic")
+                
+                if complete_projects:
+                    regen_select = ui.select(
+                        [p["topic"] for p in complete_projects],
+                        label="Select Project to Fix"
+                    ).props("outlined").classes("w-full")
+                    
+                    # Status indicator
+                    with ui.row().classes("w-full items-center gap-2 mt-2 mb-3"):
+                        ui.icon("info", size="sm").classes("text-blue-500")
+                        regen_status_label = ui.label("Select a project to check subtitle status").classes("text-sm text-gray-600 dark:text-gray-400")
+                    
+                    async def check_subtitle_status():
+                        if regen_select.value:
+                            project_path = get_project_path("output", regen_select.value)
+                            inner_folder_name = os.path.basename(project_path)
+                            
+                            # Check if already has sync fix applied
+                            tcm_path = os.path.join(project_path, f"{inner_folder_name}_combined_tcm.json")
+                            has_sync_fix = False
+                            if os.path.exists(tcm_path):
+                                try:
+                                    with open(tcm_path, "r", encoding="utf-8") as f:
+                                        tcm_data = json.load(f)
+                                        has_sync_fix = any(event.get("_sync_fix_applied", False) for event in tcm_data)
+                                except:
+                                    pass
+                            
+                            if has_sync_fix:
+                                regen_status_label.set_text("✓ Subtitles already use improved sync (you can still regenerate if needed)")
+                                regen_status_label.classes(
+                                    remove="text-gray-600 dark:text-gray-400 text-orange-600 dark:text-orange-400 text-red-600 dark:text-red-400",
+                                    add="text-green-600 dark:text-green-400"
+                                )
+                                return
+                            
+                            # Check for voiceover cache
+                            has_cache = False
+                            scene_dirs = sorted(
+                                glob.glob(os.path.join(project_path, "scene*")),
+                                key=lambda x: int(re.search(r"scene(\d+)", x).group(1)) if re.search(r"scene(\d+)", x) else 0
+                            )
+                            
+                            for scene_dir in scene_dirs:
+                                cache_dirs = [
+                                    os.path.join(scene_dir, "code", "media", "voiceovers"),
+                                    os.path.join(project_path, "media", "voiceovers"),
+                                ]
+                                for cache_dir in cache_dirs:
+                                    if os.path.exists(cache_dir) and glob.glob(os.path.join(cache_dir, "*.json")):
+                                        has_cache = True
+                                        break
+                                if has_cache:
+                                    break
+                            
+                            if has_cache:
+                                regen_status_label.set_text("⚠ Old subtitle timing detected - regeneration recommended")
+                                regen_status_label.classes(
+                                    remove="text-gray-600 dark:text-gray-400 text-green-600 dark:text-green-400 text-red-600 dark:text-red-400",
+                                    add="text-orange-600 dark:text-orange-400"
+                                )
+                            else:
+                                regen_status_label.set_text("⚠ No cache found - will use fallback scaling (less accurate)")
+                                regen_status_label.classes(
+                                    remove="text-gray-600 dark:text-gray-400 text-green-600 dark:text-green-400 text-red-600 dark:text-red-400",
+                                    add="text-orange-600 dark:text-orange-400"
+                                )
+                    
+                    regen_select.on_value_change(lambda: asyncio.create_task(check_subtitle_status()))
+                    
+                    async def handle_regenerate_subtitles(topic):
+                        if not topic:
+                            ui.notify("Please select a project.", color="warning")
+                            return
+                        
+                        # Disable button and update UI
+                        regen_button.disable()
+                        regen_button.set_text("⏳ Regenerating...")
+                        regen_status_container.style("display: block;")
+                        regen_status_label_progress.set_text("🔄 Deleting old subtitle files... (UI remains responsive)")
+                        
+                        try:
+                            import concurrent.futures
+                            
+                            def regenerate_subtitles_task():
+                                """Background task to regenerate subtitles (fast, video-free)"""
+                                # Delete old subtitle files to force regeneration
+                                project_path = get_project_path("output", topic)
+                                inner_folder_name = os.path.basename(project_path)
+                                
+                                files_to_delete = [
+                                    os.path.join(project_path, f"{inner_folder_name}_combined_tcm.json"),
+                                    os.path.join(project_path, f"{inner_folder_name}_combined.srt"),
+                                    os.path.join(project_path, f"{inner_folder_name}_combined.vtt"),
+                                ]
+                                
+                                for file_path in files_to_delete:
+                                    if os.path.exists(file_path):
+                                        os.remove(file_path)
+                                
+                                # Use fast subtitle-only regeneration (doesn't touch video)
+                                result = regenerate_subtitles_only(topic)
+                                return result
+                            
+                            # Update UI before running background task
+                            regen_status_label_progress.set_text("🔄 Regenerating subtitles with improved sync...")
+                            
+                            # Run in executor to avoid blocking UI
+                            loop = asyncio.get_running_loop()
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                result = await loop.run_in_executor(executor, regenerate_subtitles_task)
+                            
+                            # Update UI based on result (back in main event loop, context is restored)
+                            if result == "success":
+                                regen_status_label_progress.set_text("✅ Subtitles regenerated successfully! (video unchanged)")
+                                ui.notify(f"✅ Subtitles for '{topic}' fixed successfully!", color="positive", icon="check_circle")
+                            elif result == "no_video":
+                                regen_status_label_progress.set_text("⚠️ Combined video not found")
+                                ui.notify(f"⚠️ No combined video found for '{topic}'. Generate video first.", color="warning")
+                            elif result == "no_data":
+                                regen_status_label_progress.set_text("⚠️ No TCM data found")
+                                ui.notify(f"⚠️ No subtitle data found for '{topic}'", color="warning")
+                            else:
+                                regen_status_label_progress.set_text("✅ Subtitles regenerated!")
+                                ui.notify(f"✅ Subtitles for '{topic}' regenerated", color="positive")
+                            
+                            # Refresh dashboard and inspector
+                            await update_dashboard()
+                            
+                            if app_state.get("current_topic_inspector") == topic:
+                                await update_inspector(topic)
+                            
+                        except Exception as e:
+                            # Handle errors
+                            error_msg = str(e)
+                            regen_status_label_progress.set_text(f"❌ Error: {error_msg}")
+                            ui.notify(f"Error regenerating subtitles: {error_msg}", color="negative")
+                            print(f"Subtitle regeneration error: {e}")
+                            import traceback
+                            traceback.print_exc()
+                        finally:
+                            # Re-enable button
+                            regen_button.enable()
+                            regen_button.set_text("🔄 Regenerate Subtitles")
+                    
+                    regen_button = ui.button(
+                        "🔄 Regenerate Subtitles",
+                        on_click=lambda: asyncio.create_task(handle_regenerate_subtitles(regen_select.value)),
+                    ).props("unelevated no-caps").classes("w-full mt-2")
+                    
+                    # Status container
+                    regen_status_container = ui.column().classes("w-full gap-2 mt-3").style("display: none;")
+                    with regen_status_container:
+                        with ui.card().classes("w-full border-l-4 border-primary").style("padding: 16px; background: rgba(255, 75, 75, 0.05);"):
+                            regen_status_label_progress = ui.label("Processing...").classes("text-sm font-medium text-gray-700 dark:text-gray-300")
+                
+                else:
+                    with ui.row().classes("w-full items-center gap-2 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg"):
+                        ui.icon("info", size="md").classes("text-orange-600")
+                        ui.label("No completed projects found. Complete a project first to use this feature.").classes("text-orange-700 dark:text-orange-300 font-medium")
 
     # --- Main Content Area (UI Definition) ---
     with ui.column().classes("w-full max-w-6xl mx-auto gap-6").style("padding: 24px 16px;"):
@@ -4615,10 +5224,116 @@ Style: Use simple animations, friendly tone, and a relatable analogy (like guess
                         ui.notify("Please enter a Project Name first.", color="warning")
                         return
                     
+                    # Create a dialog to ask for difficulty level
+                    difficulty_level = None
+                    
+                    with ui.dialog().props('persistent') as difficulty_dialog, ui.card().classes("w-full max-w-md"):
+                        # Header with icon
+                        with ui.row().classes("items-center gap-3 p-6 pb-4 border-b border-gray-200 dark:border-gray-700"):
+                            ui.icon("school", size="md").classes("text-primary")
+                            with ui.column().classes("gap-1"):
+                                ui.label("Select Difficulty Level").classes("text-xl font-bold text-gray-900 dark:text-white")
+                                ui.label("Choose the target audience for your video").classes("text-sm text-gray-600 dark:text-gray-400")
+                        
+                        difficulty_options = [
+                            {
+                                "label": "Beginner",
+                                "value": "beginner",
+                                "icon": "lightbulb",
+                                "color": "green",
+                                "desc": "Perfect for newcomers with no prior knowledge"
+                            },
+                            {
+                                "label": "Intermediate",
+                                "value": "intermediate",
+                                "icon": "trending_up",
+                                "color": "blue",
+                                "desc": "For learners with basic understanding"
+                            },
+                            {
+                                "label": "Advanced",
+                                "value": "advanced",
+                                "icon": "psychology",
+                                "color": "purple",
+                                "desc": "Deep dive for experts and professionals"
+                            },
+                        ]
+                        
+                        selected_difficulty = {"value": "intermediate"}  # Default
+                        option_cards = []
+                        
+                        # Options container
+                        with ui.column().classes("gap-3 p-6"):
+                            for option in difficulty_options:
+                                with ui.card().classes(
+                                    "p-4 cursor-pointer transition-all duration-200 "
+                                    "border-2 border-transparent hover:border-primary/50 "
+                                    "hover:shadow-lg"
+                                ).style("border-radius: 12px") as option_card:
+                                    with ui.row().classes("items-center gap-4 w-full"):
+                                        # Icon with colored background
+                                        with ui.element("div").classes(
+                                            f"flex items-center justify-center w-12 h-12 rounded-full "
+                                            f"bg-{option['color']}-100 dark:bg-{option['color']}-900/30"
+                                        ):
+                                            ui.icon(option["icon"], size="sm").classes(f"text-{option['color']}-600 dark:text-{option['color']}-400")
+                                        
+                                        # Text content
+                                        with ui.column().classes("flex-1 gap-1"):
+                                            ui.label(option["label"]).classes("text-base font-semibold text-gray-900 dark:text-white")
+                                            ui.label(option["desc"]).classes("text-sm text-gray-600 dark:text-gray-400")
+                                        
+                                        # Radio indicator
+                                        ui.icon("radio_button_unchecked", size="sm").classes("text-gray-400").bind_visibility_from(
+                                            selected_difficulty, "value", 
+                                            backward=lambda v, opt=option: v != opt["value"]
+                                        )
+                                        ui.icon("check_circle", size="sm").classes("text-primary").bind_visibility_from(
+                                            selected_difficulty, "value",
+                                            backward=lambda v, opt=option: v == opt["value"]
+                                        )
+                                    
+                                    # Store card reference and make clickable
+                                    option_cards.append((option_card, option))
+                                    
+                                    def make_click_handler(opt):
+                                        def handler():
+                                            selected_difficulty["value"] = opt["value"]
+                                            # Update card styles
+                                            for card, card_opt in option_cards:
+                                                if card_opt["value"] == opt["value"]:
+                                                    card.classes(remove="border-transparent", add="border-primary")
+                                                else:
+                                                    card.classes(remove="border-primary", add="border-transparent")
+                                        return handler
+                                    
+                                    option_card.on("click", make_click_handler(option))
+                                    
+                                    # Set initial selected state
+                                    if option["value"] == "intermediate":
+                                        option_card.classes(remove="border-transparent", add="border-primary")
+                        
+                        # Action buttons
+                        with ui.row().classes("gap-3 p-6 pt-4 border-t border-gray-200 dark:border-gray-700 justify-end w-full"):
+                            ui.button("Cancel", icon="close", on_click=lambda: difficulty_dialog.close()).props("flat outline").classes("px-4")
+                            ui.button(
+                                "Generate Description",
+                                icon="auto_awesome",
+                                on_click=lambda: [
+                                    difficulty_dialog.submit(selected_difficulty["value"])
+                                ]
+                            ).props("unelevated").classes("px-6 bg-primary text-white")
+                    
+                    # Show the dialog and wait for user selection
+                    difficulty_level = await difficulty_dialog
+                    
+                    if not difficulty_level:
+                        return  # User cancelled
+                    
                     # Disable button and show loading state
                     auto_gen_button.disable()
                     auto_gen_button.props("loading")
-                    ui.notify("Generating description...", color="info")
+                    ui.notify(f"Generating {difficulty_level} level description...", color="info")
                     
                     try:
                         # Run LLM call in executor to keep UI responsive
@@ -4634,6 +5349,14 @@ Style: Use simple animations, friendly tone, and a relatable analogy (like guess
                                 use_langfuse=False
                             )
                             
+                            # Map difficulty to audience description
+                            audience_map = {
+                                "beginner": "beginners with no prior knowledge, using simple language and basic concepts",
+                                "intermediate": "learners with basic understanding, building on foundational knowledge",
+                                "advanced": "experts and advanced learners, covering complex details and nuances"
+                            }
+                            audience_desc = audience_map.get(difficulty_level, audience_map["intermediate"])
+                            
                             # Create prompt that produces clean output without asterisks or preambles
                             prompt = f"""Generate a detailed video description for an educational video about "{topic}".
 
@@ -4643,22 +5366,23 @@ IMPORTANT INSTRUCTIONS:
 - Use bullet points with • symbol, not asterisks
 - Be specific, include concrete examples
 - Make it educational and engaging
+- Target audience level: {difficulty_level.upper()} - {audience_desc}
 
 REQUIRED FORMAT:
 
-Create a short video for [audience level] explaining [Topic].
+Create a short video for {audience_desc} explaining {topic}.
 
-Target Audience: [Specify audience level and background]
-Key Concepts: [List 2-4 main concepts]
+Target Audience: [Specify {difficulty_level} level audience and their background]
+Key Concepts: [List 2-4 main concepts appropriate for {difficulty_level} level]
 
 Content:
-• [First key point with specific example]
+• [First key point with specific example suitable for {difficulty_level} level]
 • [Second key point with visualization approach]
 • [Third key point showing step-by-step process]
 • [Fourth key point with comparison or application]
-• [Final point with complexity or summary]
+• [Final point with complexity or summary appropriate for {difficulty_level} level]
 
-Style: [Describe the teaching approach and tone]
+Style: [Describe the teaching approach and tone for {difficulty_level} learners]
 
 Now generate the description for "{topic}" following this exact format."""
 
@@ -4690,7 +5414,7 @@ Now generate the description for "{topic}" following this exact format."""
                                     break
                             
                             desc_input.value = generated_desc
-                            ui.notify("Description generated successfully!", color="positive")
+                            ui.notify(f"{difficulty_level.capitalize()} level description generated successfully!", color="positive")
                         else:
                             ui.notify("Failed to generate description. Please try again.", color="negative")
                     

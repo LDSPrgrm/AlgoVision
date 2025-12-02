@@ -1,2 +1,0 @@
-L: export PYTHONPATH=$(pwd):$PYTHONPATH
-W: set PYTHONPATH=%cd%;%PYTHONPATH%
